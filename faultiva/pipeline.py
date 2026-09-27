@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from .feature_pipeline import FeaturePipeline
+from .signatures import signature_from_responses
 
 PKG = Path(__file__).resolve().parent.parent
 V1_SCOPE_FAMILY = "opentitan_hmac_sha256"
@@ -74,6 +75,16 @@ class Faultiva:
             self._sites[fam] = d[f"{fam}__sites"]
             self._offsets[fam] = d[f"{fam}__offsets"]
 
+        gb = self.root / "data/faultiva_golden_baselines.npz"
+        if gb.is_file():
+            g = np.load(gb, allow_pickle=True)
+            self._golden = {c: g[f"{c}__golden"] for c in self.families
+                            if f"{c}__golden" in g}
+            self._vectors = {c: int(g[f"{c}__vectors"]) for c in self.families
+                             if f"{c}__vectors" in g}
+        else:
+            self._golden, self._vectors = {}, {}
+
         self._model = None
         self._threshold = float(json.loads(
             (self.root / "models/hmac_final_diagnostic_model_lock_11d2d.json")
@@ -104,6 +115,13 @@ class Faultiva:
         return h.hexdigest()
 
     def detect(self, observed, golden) -> tuple[str, str]:
+        """Compare responses against a golden reference.
+
+        Returns the verdict and, when a fault is present, an *opaque* digest of
+        the mismatch pattern. That digest is NOT a catalogue key: use
+        :meth:`signature` or :func:`faultiva.signatures.signature_from_responses`
+        to obtain a key that can be looked up with :meth:`localize`.
+        """
         obs = list(observed)
         gold = list(golden)
         if len(obs) != len(gold):
@@ -114,6 +132,35 @@ class Faultiva:
             return "NO_FAULT_DETECTED", ""
         return "FAULT_DETECTED", self.behaviour_signature(
             [a != b for a, b in zip(obs, gold)])
+
+    # ---------------- catalogue keys ----------------
+    def golden(self, family: str) -> np.ndarray:
+        """Fault-free reference responses for a characterized circuit.
+
+        Shape is (vectors, 32) uint8. Raises if the family is not shipped with
+        a baseline.
+        """
+        if family not in self._golden:
+            raise KeyError(f"no golden baseline shipped for {family!r}; "
+                           f"available: {sorted(self._golden)}")
+        return self._golden[family]
+
+    def vectors(self, family: str) -> int:
+        """Number of vectors in the frozen plan for this circuit."""
+        return self._vectors[family]
+
+    def signature(self, family: str, observed, golden, *,
+                  cycle_delta=None, timed_out=None,
+                  protocol_error=None) -> str:
+        """Compute the catalogue key for captured response bytes.
+
+        ``observed`` and ``golden`` are (vectors, 32) uint8 arrays. This is the
+        key :meth:`localize` expects; see ``faultiva.signatures`` for the full
+        definition and for when the optional channels matter.
+        """
+        return signature_from_responses(
+            family, observed, golden, cycle_delta=cycle_delta,
+            timed_out=timed_out, protocol_error=protocol_error)
 
     # ---------------- stage 2: localization ----------------
     def localize(self, family: str, signature: str) -> np.ndarray:
@@ -152,11 +199,34 @@ class Faultiva:
     # ---------------- full pipeline ----------------
     def analyse(self, family: str, observed, golden, *,
                 stuck_value: int | None = None,
-                key_bits=None, message_bits=None) -> FaultivaResult:
+                key_bits=None, message_bits=None,
+                cycle_delta=None, timed_out=None,
+                protocol_error=None) -> FaultivaResult:
+        """Run the full pipeline.
+
+        ``observed`` and ``golden`` may be a sequence of response records, or a
+        (vectors, 32) uint8 array of response bytes. Byte arrays enable
+        localization; plain sequences support detection only, because the
+        catalogue is keyed on measured response bytes.
+        """
         result = FaultivaResult(circuit=family)
-        result.detection, signature = self.detect(observed, golden)
+        result.detection, mismatch_digest = self.detect(observed, golden)
         if result.detection == "NO_FAULT_DETECTED":
             result.localization = "NOT_APPLICABLE"
+            result.verification = "NOT_APPLICABLE"
+            return result
+
+        obs_arr = np.asarray(observed)
+        gold_arr = np.asarray(golden)
+        byte_shaped = (obs_arr.ndim == 2 and obs_arr.shape == gold_arr.shape
+                       and obs_arr.shape[1] == 32)
+        if byte_shaped:
+            signature = self.signature(
+                family, obs_arr, gold_arr, cycle_delta=cycle_delta,
+                timed_out=timed_out, protocol_error=protocol_error)
+        else:
+            result.signature = mismatch_digest
+            result.localization = "REQUIRES_RESPONSE_BYTES"
             result.verification = "NOT_APPLICABLE"
             return result
 

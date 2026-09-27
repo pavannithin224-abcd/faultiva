@@ -9,6 +9,8 @@ Read docs/HONEST_LIMITS.md before drawing conclusions from any output.
 """
 from .pipeline import Faultiva, FaultivaResult, V1_SCOPE_FAMILY
 from .feature_pipeline import FeaturePipeline
+from .signatures import signature_digest, signature_from_responses
 
 __version__ = "1.0.0"
-__all__ = ["Faultiva", "FaultivaResult", "FeaturePipeline", "V1_SCOPE_FAMILY"]
+__all__ = ["Faultiva", "FaultivaResult", "FeaturePipeline", "V1_SCOPE_FAMILY",
+           "signature_digest", "signature_from_responses"]

@@ -67,3 +67,29 @@ jobs:
           assert verdict == "OUT_OF_SCOPE", verdict
           print("out-of-scope rule enforced")
           PY
+
+      - name: run capture localization example
+        run: python examples/localize_capture.py
+
+      - name: assert signature round-trip localizes
+        run: |
+          python - <<'PY'
+          import numpy as np
+          from pathlib import Path
+          from faultiva import Faultiva
+          f = Faultiva()
+          caps = np.load(Path(f.root) / "data/faultiva_example_captures.npz",
+                         allow_pickle=True)
+          families = [str(x) for x in caps["families"]]
+          assert families, "no example captures shipped"
+          for fam in families:
+              key = f.signature(fam,
+                                caps[f"{fam}__response"], f.golden(fam),
+                                cycle_delta=caps[f"{fam}__cycles"],
+                                timed_out=caps[f"{fam}__timeout"],
+                                protocol_error=caps[f"{fam}__protocol"])
+              sites = f.localize(fam, key)
+              assert sites.size > 0, f"{fam}: capture failed to localize"
+              print(f"{fam}: {sites.size} candidate site(s)")
+          print(f"round-trip verified on {len(families)} circuits")
+          PY
