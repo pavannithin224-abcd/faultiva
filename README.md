@@ -9,6 +9,7 @@ Detection, localization, and structural verification in one 4.7 MB package. No G
 <p>
 <a href="https://github.com/pavannithin224-abcd/faultiva/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/pavannithin224-abcd/faultiva/actions/workflows/ci.yml/badge.svg"></a>
 <img alt="python" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-3776ab?style=flat-square&logo=python&logoColor=white">
+<a href="https://doi.org/10.5281/zenodo.22987539"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281%2Fzenodo.22987539.svg"></a>
 <img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square">
 <img alt="size" src="https://img.shields.io/badge/download-4.4%20MB-555?style=flat-square">
 <img alt="gpu" src="https://img.shields.io/badge/GPU-not%20required-0b6e4f?style=flat-square">
