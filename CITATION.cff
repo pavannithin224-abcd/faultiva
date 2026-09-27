@@ -1,0 +1,67 @@
+cff-version: 1.2.0
+message: >-
+  If you use Faultiva in your work, please cite it using these metadata.
+title: >-
+  Faultiva: Hybrid Fault Detection and Localization for VLSI Circuits
+abstract: >-
+  A self-contained tool for diagnosing single stuck-at faults in gate-level VLSI
+  circuits from observed output alone. Detection and localization use exact
+  behaviour-signature retrieval with zero learned parameters, backed by a
+  dictionary of 127,484 signature-to-site entries across four characterized
+  circuits. A third stage verifies each candidate with a 93,185-parameter
+  multilayer perceptron over 646 structural features at a locked threshold of
+  0.4965. The behavioural and structural stages use disjoint evidence, so
+  agreement between them is corroboration rather than self-confirmation. End to
+  end inference takes roughly 0.5 milliseconds on a single CPU core. Measured
+  across 7,849,696 transactions with zero false alarms; exact-site localization
+  reaches 0.4516 on SHA-256 and 0.3675 on AES. Localization returns fault
+  equivalence classes rather than always a single site, because 83 to 99 percent
+  of ambiguous candidate sets are structurally indistinguishable from any
+  response-based method.
+type: software
+authors:
+  - family-names: Nithin
+    given-names: Pavan
+    alias: pavannithin224-abcd
+version: 1.0.0
+date-released: '2026-09-27'
+license: Apache-2.0
+repository-code: 'https://github.com/pavannithin224-abcd/faultiva'
+doi: 10.5281/zenodo.22987539
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22987539
+    description: Concept DOI resolving to the latest version
+keywords:
+  - VLSI fault detection
+  - fault localization
+  - fault diagnosis
+  - stuck-at fault
+  - behaviour signature
+  - fault equivalence
+  - gate-level netlist
+  - hardware verification
+  - hybrid model
+references:
+  - type: software
+    title: >-
+      CircuitSage V2: Behaviour-Signature Fault Localization is Bounded by
+      Structural Fault Equivalence
+    authors:
+      - family-names: Nithin
+        given-names: Pavan
+    doi: 10.5281/zenodo.22986950
+    repository-code: >-
+      https://github.com/pavannithin224-abcd/circuitsage-vlsi-fault-detection-v2
+    notes: >-
+      The study behind this tool. Every measured claim in the model card is
+      anchored to a hash-verified audit artifact published there.
+  - type: software
+    title: Graph-Aware Fault Detection for an OpenTitan HMAC Circuit
+    authors:
+      - family-names: Nithin
+        given-names: Pavan
+    doi: 10.5281/zenodo.22986785
+    repository-code: >-
+      https://github.com/pavannithin224-abcd/circuitsage-hmac-fault-detection
+    notes: Supplies the verification model used as stage 3 of this pipeline.
