@@ -1,0 +1,81 @@
+{
+  "candidate_id": "HYBRID_SGC3_MLP_128_64_32_A1E4_LR1E3",
+  "created_at_utc": "2026-09-05T15:51:06.858870+00:00",
+  "evaluation_audit": {
+    "bytes": 3068,
+    "path": "results/hmac_fault_campaign_11d2/hmac_hybrid_site_test_comparator_freeze_11d2c.json",
+    "sha256": "6ae184f7eaef5070871b4ac54e280c01029ffd1d32168d5b44d8b76a5efa227e"
+  },
+  "evaluation_comparison": {
+    "bytes": 4452,
+    "path": "results/hmac_fault_campaign_11d2/hybrid_evaluation_11d2c/hmac_hybrid_vs_frozen_comparators_11d2c.json",
+    "sha256": "a1713dfbaf51227952712d88f7f5aac95388dfef70b3187735d1ca0c7ff47595"
+  },
+  "evaluation_lock": {
+    "bytes": 8957,
+    "path": "results/hmac_fault_campaign_11d2/hybrid_evaluation_11d2c/hmac_hybrid_site_test_evaluation_lock_11d2c.json",
+    "sha256": "ee4d4b200027a756d9b8b699a4cc962127edabd4e67f1bac4c7706e6f4c2a0be"
+  },
+  "evaluation_manifest": {
+    "bytes": 26456,
+    "path": "results/hmac_fault_campaign_11d2/hmac_hybrid_site_test_comparator_manifest_11d2c.json",
+    "sha256": "ebe62b16ec9bc9a551ecefafc76d44cf589fdac4d53dcc4bf351cea49aa11bbc"
+  },
+  "evaluation_metrics": {
+    "balanced_accuracy": 0.8166477861992408,
+    "brier_score": 0.12096220759709557,
+    "confusion_matrix": {
+      "false_negative": 21089,
+      "false_positive": 63331,
+      "true_negative": 183252,
+      "true_positive": 170856
+    },
+    "f1_score": 0.8018923713778828,
+    "mcc": 0.6298211937630854,
+    "negative_samples": 246583,
+    "positive_prevalence": 0.4377029516929364,
+    "positive_samples": 191945,
+    "pr_auc": 0.8991351450820819,
+    "precision": 0.729570813068189,
+    "predicted_negative": 204341,
+    "predicted_positive": 234187,
+    "recall": 0.8901299851519967,
+    "roc_auc": 0.9165987380974197,
+    "sample_count": 438528,
+    "specificity": 0.743165587246485,
+    "threshold": 0.4965
+  },
+  "evaluation_partition": "DEV_SITE_TEST",
+  "feature_or_graph_refitting_allowed": false,
+  "holdout_use_for_tuning_allowed": false,
+  "lock_status": "FROZEN",
+  "model_artifact": {
+    "bytes": 1392918,
+    "path": "results/hmac_fault_campaign_11d2/hybrid_training_11d2b/hmac_selected_hybrid_model_11d2b.joblib",
+    "sha256": "12fea5eabf4a6c605325b6ce4c1217f6a37cc59750065db8b85c3da14713f6b8"
+  },
+  "model_family": "GRAPH_AUGMENTED_FEATURE_FUSION_MLP",
+  "model_id": "HYBRID_FUSION_MLP_11D2C",
+  "model_retraining_allowed": false,
+  "stage": "11D-2D",
+  "status": "PASS",
+  "threshold": 0.4965,
+  "threshold_reselection_allowed": false,
+  "title": "FINAL DEVELOPMENT DIAGNOSTIC MODEL LOCK",
+  "training_audit": {
+    "bytes": 2470,
+    "path": "results/hmac_fault_campaign_11d2/hmac_hybrid_training_calibration_freeze_11d2b.json",
+    "sha256": "39f459b3dbb0270810af8b8d39819ad2efecf982ebd929b3683d44cfa2570722"
+  },
+  "training_manifest": {
+    "bytes": 11031,
+    "path": "results/hmac_fault_campaign_11d2/hmac_hybrid_training_manifest_11d2b.json",
+    "sha256": "c5792cae623c0098165e691446c590235f50e1a5adc753dd133247b19adba41a"
+  },
+  "training_selection_lock": {
+    "bytes": 4559,
+    "path": "results/hmac_fault_campaign_11d2/hybrid_training_11d2b/hmac_hybrid_selection_lock_11d2b.json",
+    "sha256": "005cecbd94456d3d1aa6805b2dc898e895cc178564673b6b0aa269fcd64260c6"
+  },
+  "validation_use_for_tuning_allowed": false
+}

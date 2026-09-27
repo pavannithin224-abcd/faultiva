@@ -1,0 +1,64 @@
+{
+  "architecture_status": "FROZEN",
+  "architecture_version": "HMAC-HYBRID-ARCHITECTURE-CONTRACT-v1",
+  "candidate_grid": {
+    "bytes": 583,
+    "path": "config/diagnostic_model/hmac_hybrid_candidate_grid_11d2a.csv",
+    "sha256": "3aaea24ec28c4680ebd24ecef345ab82ab910c07a6f5240dc762f196c8032bbd"
+  },
+  "created_at_utc": "2026-09-05T15:03:49.058387+00:00",
+  "design_rationale": "Fuse the winning frozen three-hop directed-SGC topology representation with the leakage-safe sample features, then learn nonlinear interactions with the already-qualified CPU MLP backend. Feature fusion avoids in-sample score-stacking leakage and preserves the three frozen comparators.",
+  "dev_site_test_predictions_used_as_inputs": false,
+  "frozen_comparator_scores_used_as_inputs": false,
+  "fusion": {
+    "activation": "RELU",
+    "hidden_layers": [
+      128,
+      64,
+      32
+    ],
+    "input_features": 646,
+    "operation": "CONCATENATE_SAMPLE_AND_GRAPH_FEATURES",
+    "output": "BINARY_DETECTABILITY_PROBABILITY",
+    "trainable_parameters": 93185
+  },
+  "fusion_canary": {
+    "combined_features": 646,
+    "graph_features": 119,
+    "propagation_cache_sha256": "b5874b329a272f1f11baace3127d97e5ecbea8f6170936e7991a6aca4e02a2ce",
+    "records": 16,
+    "replay_exact": true,
+    "sample_features": 527,
+    "sha256": "7a96903ba8a375cb9c3a7dddecd69338def8200ddfcc0afa1f22dac7afb5aaaf",
+    "status": "PASS"
+  },
+  "fusion_level": "FEATURE_LEVEL",
+  "graph_branch": {
+    "direction_channels": [
+      "SELF",
+      "INBOUND",
+      "OUTBOUND"
+    ],
+    "features": 119,
+    "graph_scaler": "FROZEN_DEV_TRAIN_NODE_SCALER_FROM_11D1C",
+    "labels_used_during_propagation": false,
+    "propagation_hops": 3,
+    "selected_gnn": "DIR_SGC_K3_L2_A1E5",
+    "source": "FROZEN_11D1C_DIR_SGC_K3_PROPAGATION_CACHE"
+  },
+  "is_deep_learning_model": true,
+  "is_hybrid_model": true,
+  "model_family": "GRAPH_AUGMENTED_FEATURE_FUSION_MLP",
+  "post_simulation_features": 0,
+  "sample_branch": {
+    "features": 527,
+    "post_simulation_features": 0,
+    "source": "FROZEN_11C5E_LEAKAGE_SAFE_FEATURE_MATRIX",
+    "target_present": false
+  },
+  "stage": "11D-2A",
+  "status": "PASS",
+  "target_present_in_input": false,
+  "title": "HYBRID MODEL ARCHITECTURE FREEZE",
+  "uses_graph_topology": true
+}

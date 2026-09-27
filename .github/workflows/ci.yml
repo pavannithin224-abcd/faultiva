@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: verify bundle integrity and run examples
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: verify file integrity
+        run: sha256sum -c SHA256SUMS
+
+      - name: import package
+        run: python -c "from faultiva import Faultiva; print(Faultiva.__module__)"
+
+      - name: run worked example
+        run: python examples/predict_one.py
+
+      - name: run end-to-end example
+        run: python examples/end_to_end.py
+
+      - name: assert model is not saturated
+        run: |
+          python - <<'PY'
+          import numpy as np
+          from faultiva import Faultiva
+          f = Faultiva()
+          rng = np.random.default_rng(0)
+          nodes = rng.choice(f.features.n_nodes, 200, replace=False)
+          X = f.features.build_batch(nodes, 1,
+                                     rng.integers(0, 2, 256),
+                                     rng.integers(0, 2, 256))
+          p = f.model.predict_proba(X)[:, 1]
+          sat = int(((p == 0.0) | (p == 1.0)).sum())
+          print(f"saturated {sat}/{p.size}  std {p.std():.4f}")
+          assert sat <= 0.02 * p.size, "graph features look double-scaled"
+          assert p.std() > 0.05, "probability distribution collapsed"
+          PY
+
+      - name: assert scope rule holds
+        run: |
+          python - <<'PY'
+          from faultiva import Faultiva
+          f = Faultiva()
+          verdict, _ = f.verify("secworks_aes", [0], 1, None, None)
+          assert verdict == "OUT_OF_SCOPE", verdict
+          print("out-of-scope rule enforced")
+          PY
