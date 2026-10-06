@@ -4,3 +4,6 @@ __pycache__/
 venv/
 .DS_Store
 *.swp
+
+# circuits characterized by users of this package
+user_circuits/

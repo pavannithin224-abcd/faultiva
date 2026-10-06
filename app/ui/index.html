@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faultiva — stuck-at fault diagnosis for VLSI circuits</title>
+<style>
+  /* ───────────── themes ───────────── */
+  html[data-theme="light"]{
+    --paper:#ffffff; --panel:#f8fafb; --sunk:#f1f4f7;
+    --ink:#14171a; --body:#2d343c; --mut:#6b7684; --faint:#9aa4b0;
+    --line:#e3e7ec; --hair:#eef1f4;
+    --acc:#1b4ed8; --acc-soft:#eaf0fe;
+    --bad:#b3261e; --bad-soft:#fdeeec;
+    --ok:#0b6e4f;  --ok-soft:#e9f5f0;
+    --warn:#a35a09; --warn-soft:#fdf3e6;
+    --shadow:0 1px 2px rgba(20,23,26,.05);
+    --glow:none;
+    --trace:rgba(27,78,216,.13);
+    --trace-dot:rgba(27,78,216,.22);
+    --fade:#ffffff;
+  }
+  html[data-theme="dark"]{
+    --paper:#0f1216; --panel:#161a20; --sunk:#1b2027;
+    --ink:#f2f5f8; --body:#c3ccd6; --mut:#8793a1; --faint:#5f6b78;
+    --line:#252c35; --hair:#1e242b;
+    --acc:#6b9bff; --acc-soft:#17243d;
+    --bad:#ff6b5e; --bad-soft:#2e1a19;
+    --ok:#4ddba4;  --ok-soft:#10261f;
+    --warn:#f0a94a; --warn-soft:#2b2015;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+    --glow:0 0 22px rgba(107,155,255,.10);
+    --trace:rgba(107,155,255,.16);
+    --trace-dot:rgba(107,155,255,.26);
+    --fade:#0f1216;
+  }
+  :root{
+    --mono:"JetBrains Mono","SF Mono",Menlo,Consolas,ui-monospace,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--paper);color:var(--body)}
+  body{margin:0;font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;
+       transition:background .18s ease,color .18s ease}
+  h1,h2,h3{color:var(--ink);margin:0}
+  a{color:var(--acc);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.92em}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+  @media(max-width:720px){.wrap{padding:0 20px}}
+
+
+  /* ── faint circuit-trace texture behind the header area ── */
+  .texture{position:absolute;top:0;left:0;right:0;height:420px;z-index:0;
+           pointer-events:none;overflow:hidden}
+  .texture svg{position:absolute;top:0;left:50%;transform:translateX(-50%);
+               width:1400px;height:420px}
+  .texture .tr{fill:none;stroke:var(--trace);stroke-width:1.6;
+               stroke-linecap:square;stroke-linejoin:miter}
+  .texture .pad{fill:var(--trace-dot)}
+  .texture .veil{position:absolute;inset:0;
+    background:linear-gradient(to bottom,
+      transparent 0%, transparent 55%, var(--fade) 99%);}
+  .shell{position:relative;z-index:1}
+
+  /* ───────────── wordmark ───────────── */
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+  .brand:hover{text-decoration:none}
+  .brand svg{display:block;overflow:visible}
+  .wave{fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:square;
+        stroke-linejoin:miter}
+  .wave-stuck{fill:none;stroke:var(--bad);stroke-width:2;stroke-linecap:square}
+  .stuckdot{fill:var(--bad)}
+  html[data-theme="dark"] .stuckdot{filter:drop-shadow(0 0 4px var(--bad))}
+  .wordmark{font-family:var(--mono);font-weight:700;font-size:17px;
+            letter-spacing:.015em;color:var(--ink);line-height:1;
+            display:flex;align-items:baseline}
+  .wordmark .lo{color:var(--acc)}
+  .wordmark .ver{font-size:9.5px;font-weight:500;color:var(--mut);
+                 margin-left:7px;border:1px solid var(--line);
+                 padding:2px 5px;border-radius:3px;letter-spacing:.04em}
+
+  /* ───────────── nav ───────────── */
+  .nav{position:sticky;top:0;z-index:50;
+       background:color-mix(in srgb, var(--paper) 82%, transparent);
+       backdrop-filter:saturate(170%) blur(10px);
+       -webkit-backdrop-filter:saturate(170%) blur(10px);
+       border-bottom:1px solid var(--line)}
+  @supports not (backdrop-filter: blur(1px)){ .nav{background:var(--paper)} }
+  .nav .wrap{display:flex;align-items:center;gap:8px;height:60px}
+  .tabs{margin-left:28px;display:flex;gap:2px}
+  @media(max-width:760px){.tabs{margin-left:12px;gap:0}}
+  .tab{font-size:13.5px;color:var(--mut);padding:7px 13px;border-radius:5px;
+       cursor:pointer;border:1px solid transparent;transition:.14s;
+       background:none;width:auto;font-family:var(--sans);font-weight:500}
+  .tab:hover{color:var(--ink);background:var(--sunk);text-decoration:none}
+  .tab[aria-current="page"]{color:var(--ink);background:var(--sunk);
+       border-color:var(--line);font-weight:600}
+  @media(max-width:760px){.tab{padding:7px 9px;font-size:12.5px}}
+  .navright{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .iconbtn{width:34px;height:34px;display:grid;place-items:center;cursor:pointer;
+           border:1px solid var(--line);border-radius:6px;background:var(--panel);
+           color:var(--mut);padding:0;transition:.14s}
+  .iconbtn:hover{color:var(--ink);border-color:var(--mut)}
+  .cta{border:1px solid var(--ink);color:var(--ink)!important;padding:6px 13px;
+       border-radius:5px;font-weight:600;font-size:13px;white-space:nowrap}
+  .cta:hover{background:var(--ink);color:var(--paper)!important;text-decoration:none}
+  @media(max-width:620px){.cta{display:none}}
+
+  /* ───────────── views ───────────── */
+  .view{display:none;animation:fade .2s ease}
+  .view.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  .pad{padding:52px 0 64px}
+  .eyebrow{font:11px var(--mono);letter-spacing:.09em;text-transform:uppercase;
+           color:var(--mut);margin-bottom:14px}
+  .sechd{margin-bottom:24px}
+  .sechd h2{font-size:26px;letter-spacing:-.02em;margin-bottom:7px}
+  .sechd p{margin:0;font-size:15px;color:var(--mut);max-width:60ch;line-height:1.6}
+
+  /* ── overview ── */
+  .hero{display:grid;grid-template-columns:1.25fr .85fr;gap:54px;align-items:start}
+  @media(max-width:880px){.hero{grid-template-columns:1fr;gap:32px}}
+  .hero h1{font-size:40px;line-height:1.12;letter-spacing:-.03em;margin-bottom:16px}
+  @media(max-width:720px){.hero h1{font-size:29px}}
+  .lede{font-size:17px;line-height:1.58;color:var(--body);max-width:36em}
+  .lede b{color:var(--ink);font-weight:600}
+  .facts{border:1px solid var(--line);border-radius:8px;overflow:hidden;
+         background:var(--panel);box-shadow:var(--shadow);position:relative;z-index:1}
+  .facts .hd{font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase;
+             color:var(--mut);padding:10px 15px;border-bottom:1px solid var(--line)}
+  .facts .row{display:flex;justify-content:space-between;gap:14px;padding:11px 15px;
+              border-bottom:1px solid var(--hair);font-size:13.5px}
+  .facts .row:last-child{border-bottom:none}
+  .facts .row span:first-child{color:var(--mut)}
+  .facts .row span:last-child{font-family:var(--mono);font-size:12.5px;
+                              color:var(--ink);font-weight:600}
+  .nums{display:grid;grid-template-columns:repeat(4,1fr);gap:26px;margin-top:46px;
+        padding-top:34px;border-top:1px solid var(--line)}
+  @media(max-width:780px){.nums{grid-template-columns:repeat(2,1fr);gap:22px}}
+  .num-item .v{font:26px var(--mono);font-weight:700;color:var(--ink);
+               letter-spacing:-.025em}
+  .num-item .l{font-size:13px;color:var(--mut);margin-top:4px;line-height:1.45}
+
+  /* ── how it works ── */
+  .pipe{display:grid;grid-template-columns:repeat(3,1fr);
+        border:1px solid var(--line);border-radius:8px;overflow:hidden;
+        background:var(--panel);box-shadow:var(--shadow)}
+  @media(max-width:820px){.pipe{grid-template-columns:1fr}}
+  .pstep{padding:20px;border-right:1px solid var(--line)}
+  .pstep:last-child{border-right:none}
+  @media(max-width:820px){.pstep{border-right:none;border-bottom:1px solid var(--line)}
+    .pstep:last-child{border-bottom:none}}
+  .pstep .k{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .pstep .n{font:10px var(--mono);color:var(--paper);background:var(--ink);
+            padding:2px 6px;border-radius:3px;font-weight:600}
+  .pstep .tag{font:10px var(--mono);color:var(--mut);margin-left:auto;
+              border:1px solid var(--line);padding:2px 6px;border-radius:3px}
+  .pstep h3{font-size:16px;margin-bottom:6px;letter-spacing:-.015em}
+  .pstep p{margin:0;font-size:13.5px;line-height:1.55;color:var(--mut)}
+  .chan{margin-top:34px}
+  .chan table{width:100%;border-collapse:collapse}
+  .chan th{text-align:left;font:10px var(--mono);text-transform:uppercase;
+           letter-spacing:.06em;color:var(--mut);font-weight:600;
+           padding:0 14px 9px 0;border-bottom:1px solid var(--line)}
+  .chan td{padding:10px 14px 10px 0;border-bottom:1px solid var(--hair);
+           font-size:14px;color:var(--body);vertical-align:top}
+  .chan td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--ink);
+                       white-space:nowrap}
+  .fileline{font-family:var(--mono);font-size:12.5px;background:var(--sunk);
+            border:1px solid var(--line);border-radius:6px;padding:13px 15px;
+            margin-top:16px;overflow-x:auto;white-space:pre;color:var(--body)}
+
+  /* ── limits ── */
+  .lim-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px 34px}
+  @media(max-width:800px){.lim-grid{grid-template-columns:1fr}}
+  .lim{border-left:2px solid var(--line);padding-left:16px}
+  .lim h3{font-size:15px;margin-bottom:5px;letter-spacing:-.015em}
+  .lim p{margin:0;font-size:13.5px;color:var(--mut);line-height:1.55}
+
+  /* ───────────── analyser (classes used by the app JS) ───────────── */
+  .tool{display:grid;grid-template-columns:330px 1fr;gap:34px;align-items:start}
+  @media(max-width:900px){.tool{grid-template-columns:1fr}}
+  .panel{border:1px solid var(--line);border-radius:8px;background:var(--panel);
+         box-shadow:var(--shadow)}
+  .panel>h2{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;
+            color:var(--mut);padding:13px 17px;border-bottom:1px solid var(--line);
+            font-weight:600}
+  .panel .body{padding:17px}
+  label{display:block;font-size:12.5px;font-weight:650;margin:0 0 6px;color:var(--ink)}
+  .hint{font-size:12.5px;color:var(--mut);margin:7px 0 0;line-height:1.5}
+  select,input[type=file]{width:100%;font:13px var(--mono);padding:9px 10px;
+    border:1px solid var(--line);border-radius:5px;background:var(--paper);
+    color:var(--ink)}
+  select:focus,input[type=file]:focus{outline:2px solid var(--acc-soft);
+    border-color:var(--acc)}
+  .field{margin-bottom:19px}
+  button{width:100%;padding:11px;font-size:14.5px;font-weight:650;
+    border:1px solid var(--ink);border-radius:5px;background:var(--ink);
+    color:var(--paper);cursor:pointer;transition:opacity .12s;font-family:var(--sans)}
+  button:hover:not(:disabled){opacity:.87}
+  button:disabled{opacity:.42;cursor:default}
+  .linkbtn{background:none;border:none;color:var(--acc);font-size:12.5px;padding:0;
+    width:auto;font-weight:500;cursor:pointer;font-family:var(--sans)}
+  .linkbtn:hover{text-decoration:underline}
+  .clear{font-size:11.5px;color:var(--acc);cursor:pointer;margin-left:7px}
+  .uprow{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:8px}
+  .upbtn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;
+    border:1px solid var(--bd);border-radius:7px;background:var(--panel2);
+    color:var(--fg);font-size:13px;font-weight:600;cursor:pointer;
+    transition:border-color .14s,background .14s,color .14s;user-select:none;
+    line-height:1}
+  .upbtn:hover{border-color:var(--acc);color:var(--acc);background:var(--panel)}
+  .upbtn:active{transform:translateY(1px)}
+  .upbtn svg{flex:0 0 auto}
+  .upname{font-family:var(--mono);font-size:12px;color:var(--mut);
+    overflow-wrap:anywhere;min-width:0}
+  .upname.has{color:var(--fg);font-weight:600}
+  .clear:hover{text-decoration:underline}
+  .empty{color:var(--mut);font-size:14px;padding:56px 24px;text-align:center;
+         border:1px dashed var(--line);border-radius:8px;background:var(--panel)}
+  .empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:5px}
+
+  .summary{border:1px solid var(--line);border-radius:8px;overflow:hidden;
+           margin-bottom:16px;box-shadow:var(--shadow)}
+  .sum-top{padding:18px 20px;display:flex;align-items:center;gap:15px;
+           border-bottom:1px solid var(--line)}
+  .sum-top.bad{background:var(--bad-soft)}
+  .sum-top.ok{background:var(--ok-soft)}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .dot.bad{background:var(--bad);box-shadow:var(--glow)}
+  .dot.ok{background:var(--ok);box-shadow:var(--glow)}
+  .sum-verdict{font-size:19px;font-weight:650;letter-spacing:-.02em;color:var(--ink)}
+  .sum-sub{color:var(--mut);font-size:13px;margin-top:2px}
+  .sum-grid{display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel)}
+  .kpi{padding:14px 20px;border-right:1px solid var(--line)}
+  .kpi:last-child{border-right:none}
+  .kpi-l{font:10px var(--mono);text-transform:uppercase;letter-spacing:.07em;
+         color:var(--mut);font-weight:600}
+  .kpi-v{font:17px var(--mono);font-weight:650;margin-top:4px;color:var(--ink)}
+  .kpi-v.sm{font-size:13px;font-weight:500}
+  .kpi-n{font-size:11.5px;color:var(--mut);margin-top:3px}
+  @media(max-width:620px){.sum-grid{grid-template-columns:1fr}
+    .kpi{border-right:none;border-bottom:1px solid var(--line)}}
+  .pill{display:inline-block;font:11px var(--mono);font-weight:600;padding:2px 7px;
+        border-radius:3px;background:var(--sunk);color:var(--mut)}
+  .pill.sa1{background:var(--warn-soft);color:var(--warn)}
+  .pill.sa0{background:var(--acc-soft);color:var(--acc)}
+  .stage{border:1px solid var(--line);border-radius:8px;margin-bottom:14px;
+         overflow:hidden;background:var(--paper)}
+  .stage-h{display:flex;align-items:center;gap:11px;padding:11px 17px;
+           border-bottom:1px solid var(--line);background:var(--panel)}
+  .num{font:10px var(--mono);color:var(--faint)}
+  .stage-t{font:11px var(--mono);text-transform:uppercase;letter-spacing:.07em;
+           font-weight:600;color:var(--mut)}
+  .verdict{margin-left:auto;font:11.5px var(--mono);font-weight:650;
+           padding:3px 9px;border-radius:3px}
+  .v-ok{color:var(--ok);background:var(--ok-soft)}
+  .v-bad{color:var(--bad);background:var(--bad-soft)}
+  .v-warn{color:var(--warn);background:var(--warn-soft)}
+  .v-info{color:var(--acc);background:var(--acc-soft)}
+  .v-mut{color:var(--mut);background:var(--sunk)}
+  .stage-b{padding:15px 17px;font-size:14px}
+  dl{margin:0;display:grid;grid-template-columns:155px 1fr;gap:7px 14px}
+  dt{color:var(--mut);font-size:13px}
+  dd{margin:0;font:13px var(--mono);color:var(--ink)}
+  .note{margin-top:12px;padding:10px 13px;border-left:2px solid var(--line);
+        background:var(--panel);color:var(--mut);font-size:13px;line-height:1.5}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  th{text-align:left;font:10px var(--mono);text-transform:uppercase;
+     letter-spacing:.06em;color:var(--mut);font-weight:600;
+     padding:0 10px 7px 0;border-bottom:1px solid var(--line)}
+  td{padding:7px 10px 7px 0;font:12.5px var(--mono);
+     border-bottom:1px solid var(--hair);color:var(--ink)}
+  tr:last-child td{border-bottom:none}
+  .sig{font:10.5px var(--mono);color:var(--faint);word-break:break-all;margin-top:11px}
+  .vecmap{display:flex;flex-wrap:wrap;gap:2px;margin-top:10px}
+  .vec{width:11px;height:11px;border-radius:1px;background:var(--sunk);
+       border:1px solid var(--hair)}
+  .vec.bad{background:var(--bad);border-color:var(--bad)}
+  .err{border:1px solid var(--bad);background:var(--bad-soft);color:var(--bad);
+       padding:13px 15px;border-radius:6px;font-size:14px}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--paper);
+        border-top-color:transparent;border-radius:50%;animation:r .6s linear infinite;
+        vertical-align:-1px;margin-right:7px}
+  @keyframes r{to{transform:rotate(360deg)}}
+
+  footer.site{border-top:1px solid var(--line);padding:26px 0 40px;
+              font-size:13px;color:var(--mut)}
+  footer.site .wrap{display:flex;gap:28px;flex-wrap:wrap;align-items:baseline}
+  footer.site .sp{margin-left:auto}
+  @media(max-width:720px){footer.site .sp{margin-left:0}}
+</style>
+</head>
+<body>
+
+<div class="texture" aria-hidden="true">
+  <svg viewBox="0 0 1400 420" preserveAspectRatio="xMidYMin slice">
+    <g class="tr">
+      <path d="M60 40 H240 L280 80 H430 L470 40 H660"/>
+      <path d="M60 110 H180 L220 150 H520"/>
+      <path d="M760 40 H900 L940 80 H1130 L1170 40 H1340"/>
+      <path d="M880 150 H1060 L1100 110 H1340"/>
+      <path d="M120 200 H300 L340 240 H560 L600 200 H720"/>
+      <path d="M820 240 H980 L1020 200 H1240"/>
+      <path d="M240 40 V110"/><path d="M430 80 V150"/>
+      <path d="M940 80 V150"/><path d="M1130 40 V110"/>
+      <path d="M300 200 V260"/><path d="M1020 200 V260"/>
+      <path d="M60 290 H420 L460 270 H700"/>
+      <path d="M760 270 H1120 L1160 290 H1340"/>
+      <path d="M160 340 H380 L420 300 H640 L680 340 H860"/>
+      <path d="M900 300 H1080 L1120 340 H1340"/>
+      <path d="M60 390 H300 L340 350 H620"/>
+      <path d="M740 350 H1000 L1040 390 H1340"/>
+      <path d="M380 340 V390"/><path d="M1080 300 V350"/>
+      <path d="M640 290 V340"/><path d="M860 240 V300"/>
+    </g>
+    <g class="pad">
+      <circle cx="240" cy="40" r="4"/><circle cx="430" cy="80" r="4"/>
+      <circle cx="660" cy="40" r="4"/><circle cx="520" cy="150" r="4"/>
+      <circle cx="940" cy="80" r="4"/><circle cx="1130" cy="40" r="4"/>
+      <circle cx="1340" cy="110" r="4"/><circle cx="300" cy="200" r="4"/>
+      <circle cx="720" cy="200" r="4"/><circle cx="1020" cy="200" r="4"/>
+      <circle cx="700" cy="270" r="4"/><circle cx="1160" cy="290" r="4"/>
+      <circle cx="380" cy="340" r="4"/><circle cx="860" cy="340" r="4"/>
+      <circle cx="1080" cy="300" r="4"/><circle cx="620" cy="350" r="4"/>
+      <circle cx="1040" cy="390" r="4"/><circle cx="160" cy="340" r="4"/>
+    </g>
+  </svg>
+  <div class="veil"></div>
+</div>
+<div class="shell">
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#overview" aria-label="Faultiva home">
+      <svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true">
+        <path class="wave" d="M1 14 L5 14 L5 6 L9 6 L9 14 L13 14 L13 6 L16 6"/>
+        <path class="wave-stuck" d="M16 6 L29 6" stroke-dasharray="2.5 2.2"/>
+        <circle class="stuckdot" cx="16" cy="6" r="2.3"/>
+      </svg>
+      <span class="wordmark">FAULT<span class="lo">IVA</span><span class="ver">v1.0</span></span>
+    </a>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" data-view="overview">Overview</button>
+      <button class="tab" data-view="how">How it works</button>
+      <button class="tab" data-view="analyse">Analyse</button>
+      <button class="tab" data-view="limits">Limits</button>
+    </div>
+
+    <div class="navright">
+      <button class="iconbtn" id="theme" title="Toggle theme" aria-label="Toggle theme">
+        <svg id="themeicon" width="15" height="15" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"></svg>
+      </button>
+      <a class="cta" href="https://github.com/pavannithin224-abcd/faultiva"
+         target="_blank" rel="noopener">Download</a>
+    </div>
+  </div>
+</header>
+
+<!-- ───────── OVERVIEW ───────── -->
+<section class="view" id="view-overview">
+  <div class="wrap pad">
+    <div class="hero">
+      <div>
+        <div class="eyebrow">Stuck-at fault diagnosis · VLSI</div>
+        <h1>Find the broken wire inside a chip you cannot open.</h1>
+        <p class="lede">A manufactured chip can hold one internal wire permanently at 0
+        or 1. You cannot see inside it — only what comes out of the pins. Faultiva reads
+        a recording of how the circuit responded to a fixed set of test patterns and
+        reports <b>whether a fault exists, what type it is, and which gate it sits
+        on</b>.</p>
+      </div>
+      <div class="facts">
+        <div class="hd">At a glance</div>
+        <div class="row"><span>Fault catalogue</span><span>42,819 signatures</span></div>
+        <div class="row"><span>Site entries</span><span>127,484</span></div>
+        <div class="row"><span>Learned parameters</span><span>93,185</span></div>
+        <div class="row"><span>Characterized circuits</span><span>4</span></div>
+        <div class="row"><span>Typical diagnosis</span><span>~10 ms</span></div>
+        <div class="row"><span>Licence</span><span>Apache-2.0</span></div>
+      </div>
+    </div>
+    <div class="nums">
+      <div class="num-item"><div class="v">1,577/1,577</div>
+        <div class="l">observable faults reproduce their catalogued signature</div></div>
+      <div class="num-item"><div class="v">22,839</div>
+        <div class="l">fault sites characterized in the HMAC netlist</div></div>
+      <div class="num-item"><div class="v">0.3440</div>
+        <div class="l">blind prediction result, inside the band frozen beforehand</div></div>
+      <div class="num-item"><div class="v">71%</div>
+        <div class="l">agreement between behaviour and structure evidence</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── HOW IT WORKS ───────── -->
+<section class="view" id="view-how">
+  <div class="wrap pad">
+    <div class="sechd">
+      <h2>How it works</h2>
+      <p>Three stages, deliberately using different evidence. The first two carry no
+      learned weights at all — an exact comparison and a hash lookup are always right,
+      where a model only might be.</p>
+    </div>
+    <div class="pipe">
+      <div class="pstep">
+        <div class="k"><span class="n">01</span><span class="tag">0 parameters</span></div>
+        <h3>Detection</h3>
+        <p>Observed responses are compared byte-for-byte against the fault-free
+        reference. Any difference means a fault. No threshold, so a clean circuit cannot
+        raise a false alarm.</p>
+      </div>
+      <div class="pstep">
+        <div class="k"><span class="n">02</span><span class="tag">0 parameters</span></div>
+        <h3>Localization</h3>
+        <p>All four response channels across every vector hash into one behaviour
+        signature, looked up in a catalogue built by injecting every stuck-at fault.
+        A lookup, not an estimate.</p>
+      </div>
+      <div class="pstep">
+        <div class="k"><span class="n">03</span><span class="tag">93,185 parameters</span></div>
+        <h3>Verification</h3>
+        <p>A neural network independently scores the candidate using circuit structure
+        only — it never sees the responses. Agreement between disjoint evidence is real
+        corroboration.</p>
+      </div>
+    </div>
+
+    <div class="chan">
+      <div class="sechd" style="margin-top:8px">
+        <h2 style="font-size:19px">What the capture file contains</h2>
+        <p>One line per test vector, four measured channels. A fault does not always
+        corrupt the output bytes — it can hang the circuit, break the handshake, or
+        simply finish late. Recording one channel would miss those.</p>
+      </div>
+      <div class="fileline"># response (64 hex)                                              timeout  protocol  cycles
+a3f1c92b…9c22                                                   0        0         3998</div>
+      <table>
+        <thead><tr><th>Channel</th><th>What it records</th><th>Catches a fault that…</th></tr></thead>
+        <tbody>
+          <tr><td>response</td><td>the 32 output bytes produced</td><td>corrupts the data</td></tr>
+          <tr><td>timeout</td><td>did it finish within the cycle budget?</td><td>hangs the circuit</td></tr>
+          <tr><td>protocol</td><td>were bus handshake rules obeyed?</td><td>breaks handshaking</td></tr>
+          <tr><td>cycles</td><td>completion time against fault-free</td><td>only changes timing</td></tr>
+        </tbody>
+      </table>
+      <p class="hint" style="margin-top:14px">Nothing in the file describes the fault —
+      no location, no polarity, no label. Only what a tester could measure at the pins.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── ANALYSE ───────── -->
+<section class="view" id="view-analyse">
+  <div class="wrap pad">
+    <div class="sechd">
+      <h2>Analyse a capture</h2>
+      <p>Select the circuit the capture came from, then upload it. Everything runs on
+      this machine — no network access, no telemetry.</p>
+    </div>
+    <div class="tool">
+      <form class="panel" id="form">
+        <h2>Input</h2>
+        <div class="body">
+          <div class="field">
+            <label for="circuit">Circuit</label>
+            <select id="circuit" name="circuit"></select>
+            <p class="hint" id="circuit-meta"></p>
+          </div>
+          <div class="field">
+            <label for="capture">Capture</label>
+            <input type="file" id="capture" name="capture" accept=".txt,.csv,.dat" hidden>
+            <div class="uprow">
+              <label for="capture" class="upbtn" id="upbtn">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                     stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>Upload file</span>
+              </label>
+              <span class="upname" id="upname">No file selected</span>
+            </div>
+            <p class="hint">One line per test vector:
+              <code>response(64 hex) timeout protocol cycles</code>.
+              <span class="clear" id="clr-cap">clear</span><br>
+              <button type="button" class="linkbtn" id="dl-example">Download a real example capture</button>
+            </p>
+          </div>
+          <button type="submit" id="run">Analyse</button>
+        </div>
+      </form>
+
+      <div id="out">
+        <div class="empty">
+          <b>No capture loaded</b>
+          Choose a circuit and upload a capture, or download an example to try it.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── LIMITS ───────── -->
+<section class="view" id="view-limits">
+  <div class="wrap pad">
+    <div class="sechd">
+      <h2>What it does not do</h2>
+      <p>Each of these was measured rather than assumed. They are stated plainly because
+      a tool that hides its failure modes is harder to trust than one that names them.</p>
+    </div>
+    <div class="lim-grid">
+      <div class="lim">
+        <h3>Some faults cannot be separated</h3>
+        <p>99.8% of HMAC faults have a structural twin producing identical output on
+        every vector. No response-based method can tell them apart, so the candidate set
+        is reported rather than a guess.</p>
+      </div>
+      <div class="lim">
+        <h3>Simulation, not silicon</h3>
+        <p>Validated in Verilator against real third-party RTL. No physical chip has been
+        tested.</p>
+      </div>
+      <div class="lim">
+        <h3>Single stuck-at faults only</h3>
+        <p>Multiple simultaneous, bridging, delay and transient faults are out of scope
+        and return <code>UNKNOWN_SIGNATURE</code> rather than a confident wrong answer.</p>
+      </div>
+      <div class="lim">
+        <h3>Four circuits are catalogued</h3>
+        <p>Localization needs a per-circuit injection campaign. Detection works on
+        anything with a fault-free reference.</p>
+      </div>
+      <div class="lim">
+        <h3>Catalogue growth reduces resolution</h3>
+        <p>Same circuit, same faults, catalogue grown four times larger — exact-site
+        identification fell by 19×. Measured and published rather than hidden.</p>
+      </div>
+      <div class="lim">
+        <h3>Two circuits were not scorable</h3>
+        <p>The acquired <code>ibex_cpu</code> source was missing seven dependencies.
+        Substitute RTL was refused, because characterizing a stub would have measured the
+        stub.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Runs entirely on this machine · no network access · no telemetry</span>
+    <a href="https://github.com/pavannithin224-abcd/faultiva" target="_blank" rel="noopener">Repository</a>
+    <a href="https://doi.org/10.5281/zenodo.22987539" target="_blank" rel="noopener">DOI</a>
+    <a href="https://github.com/pavannithin224-abcd/circuitsage-vlsi-fault-detection-v2" target="_blank" rel="noopener">Evidence</a>
+    <span class="sp">Apache-2.0</span>
+  </div>
+</footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const out = $("#out");
+let CIRCUITS = [];
+
+fetch("/api/circuits").then(r => r.json()).then(d => {
+  CIRCUITS = d.circuits;
+  const sel = $("#circuit");
+  sel.innerHTML = d.circuits.map(c => `<option value="${c.id}">${c.id}</option>`).join("");
+  meta();
+});
+
+$("#circuit").addEventListener("change", meta);
+function meta() {
+  const c = CIRCUITS.find(x => x.id === $("#circuit").value);
+  if (!c) return;
+  $("#circuit-meta").textContent =
+    `${c.signatures.toLocaleString()} catalogued signatures · `
+    + `${c.vectors} vectors · `
+    + `${(c.uniquely_localizable * 100).toFixed(0)}% resolve to one site`;
+}
+
+$("#dl-example").addEventListener("click", async () => {
+  const circuit = $("#circuit").value;
+  const r = await fetch(`/api/example?circuit=${encodeURIComponent(circuit)}`);
+  const d = await r.json();
+  if (d.error) return;
+  const blob = new Blob([d.content], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = d.filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+$("#form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = $("#run");
+  const fd = new FormData();
+  const cap = $("#capture").files[0];
+  if (!cap) { out.innerHTML = `<div class="err">Select a capture file.</div>`; return; }
+  fd.append("circuit", $("#circuit").value);
+  fd.append("capture", cap);
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spin"></span>Analysing`;
+  out.innerHTML = `<div class="empty">Running the pipeline…</div>`;
+  try {
+    const r = await fetch("/api/analyse", { method: "POST", body: fd });
+    const d = await r.json();
+    if (!r.ok) { out.innerHTML = `<div class="err">${esc(d.error || "request failed")}</div>`; }
+    else render(d);
+  } catch (err) {
+    out.innerHTML = `<div class="err">${esc(String(err))}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Analyse";
+  }
+});
+
+const esc = s => String(s).replace(/[&<>"]/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function badge(text, kind) { return `<span class="verdict v-${kind}">${esc(text)}</span>`; }
+
+function stage(n, title, verdict, kind, body) {
+  return `<div class="stage">
+    <div class="stage-h"><span class="num">${n}</span>
+      <span class="stage-t">${title}</span>${badge(verdict, kind)}</div>
+    <div class="stage-b">${body}</div></div>`;
+}
+
+function render(d) {
+  let html = "";
+
+  const det = d.detection || {};
+  const loc = d.localization || {};
+  const ver = d.verification || {};
+  const faulty = det.verdict === "FAULT_DETECTED";
+
+  // ---------- verdict panel ----------
+  if (det.verdict && det.verdict !== "NOT_ATTEMPTED") {
+    let typeCell = "—", typeNote = "";
+    if (loc.fault_types && loc.fault_types.length) {
+      typeCell = loc.fault_types.map(x =>
+        `<span class="pill ${x.toLowerCase()}">${x}</span>`).join(" ");
+      typeNote = loc.type_certain ? "determined by the signature"
+                                  : "signature matches both polarities";
+    } else if (faulty) { typeNote = "not resolved"; }
+
+    let locCell = "—", locNote = "";
+    if (loc.status === "EXACT") {
+      const f0 = (loc.faults || [])[0] || {};
+      const nn = f0.net_name && f0.net_name.length < 30 ? f0.net_name : null;
+      locCell = nn ? esc(nn) : `site ${f0.site}`;
+      locNote = nn ? `site ${f0.site} · ${esc(f0.cell_type || "")}`
+                   : (f0.cell_type ? esc(f0.cell_type) : "exact match");
+    } else if (loc.status === "AMBIGUOUS") {
+      locCell = `${loc.fault_count} sites`;
+      locNote = "indistinguishable from output alone";
+    } else if (loc.status === "UNKNOWN_SIGNATURE") {
+      locCell = "not catalogued"; locNote = "no location reported";
+    } else if (loc.status === "UNAVAILABLE") {
+      locCell = "unavailable"; locNote = "circuit not characterized";
+    } else if (!faulty) { locCell = "—"; locNote = "no fault to locate"; }
+
+    html += `<div class="summary">
+      <div class="sum-top ${faulty ? "bad" : "ok"}">
+        <span class="dot ${faulty ? "bad" : "ok"}"></span>
+        <div>
+          <div class="sum-verdict">${faulty ? "Fault detected" : "No fault detected"}</div>
+          <div class="sum-sub">${det.differing_vectors} of ${det.total_vectors}
+            test vectors differ from the fault-free reference</div>
+        </div>
+      </div>
+      <div class="sum-grid">
+        <div class="kpi"><div class="kpi-l">Faults found</div>
+          <div class="kpi-v">${faulty ? (loc.fault_count != null ? loc.fault_count : "—") : "0"}</div>
+          <div class="kpi-n">${faulty && loc.fault_count ? "candidate fault" + (loc.fault_count > 1 ? "s" : "") : "&nbsp;"}</div></div>
+        <div class="kpi"><div class="kpi-l">Fault type</div>
+          <div class="kpi-v sm">${typeCell}</div>
+          <div class="kpi-n">${typeNote || "&nbsp;"}</div></div>
+        <div class="kpi"><div class="kpi-l">Location</div>
+          <div class="kpi-v sm">${locCell}</div>
+          <div class="kpi-n">${locNote || "&nbsp;"}</div></div>
+      </div>
+    </div>`;
+  }
+
+  // ---------- circuit ----------
+  if (d.circuit) {
+    const c = d.circuit;
+    html += stage("00", "Circuit", c.identified || "UNCHARACTERIZED",
+      c.identified ? "mut" : "warn",
+      `<dl><dt>identified by</dt><dd>${esc(c.reason)}</dd>
+        ${c.modules && c.modules.length ? `<dt>modules</dt><dd>${esc(c.modules.join(", "))}</dd>` : ""}
+        ${c.cells ? `<dt>cells in netlist</dt><dd>${c.cells.toLocaleString()}</dd>` : ""}
+      </dl>`);
+  }
+
+  // ---------- detection ----------
+  if (det.verdict && det.verdict !== "NOT_ATTEMPTED") {
+    let map = "";
+    if (faulty && det.total_vectors <= 256) {
+      const set = new Set(det.differing_list || []);
+      map = `<p class="hint" style="margin-bottom:6px">each square is one test vector; red differs from golden</p>
+        <div class="vecmap">` +
+        Array.from({length: det.total_vectors}, (_, i) =>
+          `<span class="vec${set.has(i) ? " bad" : ""}" title="vector ${i}"></span>`).join("") +
+        `</div>`;
+    }
+    html += stage("01", "Detection", faulty ? "FAULT DETECTED" : "FAULT FREE",
+      faulty ? "bad" : "ok",
+      `<dl><dt>differing vectors</dt><dd>${det.differing_vectors} of ${det.total_vectors}</dd>
+       ${det.first_differing != null ? `<dt>first difference</dt><dd>vector ${det.first_differing}</dd>` : ""}
+       </dl>${map}`);
+  }
+
+  // ---------- localization ----------
+  if (loc.status) {
+    const kindMap = {EXACT:"ok", AMBIGUOUS:"warn", UNKNOWN_SIGNATURE:"warn",
+                     UNAVAILABLE:"mut", NOT_APPLICABLE:"mut"};
+    let body = "";
+    if (loc.status === "EXACT" || loc.status === "AMBIGUOUS") {
+      const shortNet = s => {
+        if (!s) return null;
+        s = String(s);
+        return s.length > 42 ? s.slice(0, 20) + "…" + s.slice(-18) : s;
+      };
+      body = `<table><thead><tr>
+          <th>site</th><th>type</th><th>net</th><th>cell</th>
+        </tr></thead><tbody>` +
+        loc.faults.slice(0, 12).map(f => `<tr>
+            <td>${f.site}</td>
+            <td><span class="pill ${f.type.toLowerCase()}">${f.type}</span></td>
+            <td title="${esc(f.net_name || "")}">${f.net_name ? esc(shortNet(f.net_name)) : "—"}</td>
+            <td>${f.cell_type ? esc(f.cell_type) : "—"}</td></tr>`).join("") +
+        `</tbody></table>` +
+        (loc.fault_count > 12 ? `<p class="hint">showing 12 of ${loc.fault_count}</p>` : "") +
+        (loc.note ? `<div class="note">${esc(loc.note)}</div>` : "") +
+        `<div class="sig">signature ${esc(loc.signature)}</div>`;
+    } else {
+      body = `<div class="note">${esc(loc.reason || "")}</div>` +
+        (loc.hint ? `<div class="note">${esc(loc.hint)}</div>` : "") +
+        (loc.signature ? `<div class="sig">signature ${esc(loc.signature)}</div>` : "");
+    }
+    html += stage("02", "Localization", loc.status.replace(/_/g, " "),
+      kindMap[loc.status] || "mut", body);
+  }
+
+  // ---------- verification ----------
+  if (ver.verdict) {
+    const kind = ver.verdict === "VERIFIED" ? "ok"
+               : ver.verdict === "FLAGGED" ? "warn" : "info";
+    html += stage("03", "Verification", ver.verdict.replace(/_/g, " "), kind,
+      (ver.sites_scored ? `<dl>
+          <dt>sites scored</dt><dd>${ver.sites_scored}</dd>
+          <dt>above threshold</dt><dd>${ver.above_threshold} of ${ver.sites_scored} (thr ${ver.threshold})</dd>
+        </dl>` : "") + `<div class="note">${esc(ver.note || "")}</div>`);
+  }
+
+  if (d.elapsed_ms != null) {
+    html += `<p class="hint" style="text-align:right">analysed in ${d.elapsed_ms} ms`
+          + ` · <a href="${d.repository}" target="_blank" rel="noopener">download Faultiva</a></p>`;
+  }
+  out.innerHTML = html;
+}
+</script>
+<script>
+/* ── view routing: each section is its own page ── */
+(function(){
+  var VIEWS = ["overview","how","analyse","limits"];
+  function show(name, push){
+    if (VIEWS.indexOf(name) === -1) name = "overview";
+    VIEWS.forEach(function(v){
+      var el = document.getElementById("view-" + v);
+      if (el) el.classList.toggle("on", v === name);
+    });
+    document.querySelectorAll(".tab").forEach(function(t){
+      if (t.dataset.view === name) t.setAttribute("aria-current","page");
+      else t.removeAttribute("aria-current");
+    });
+    if (push && location.hash !== "#" + name) {
+      history.replaceState(null, "", "#" + name);
+    }
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll(".tab").forEach(function(t){
+    t.addEventListener("click", function(){ show(t.dataset.view, true); });
+  });
+  document.querySelector(".brand").addEventListener("click", function(e){
+    e.preventDefault(); show("overview", true);
+  });
+  window.addEventListener("hashchange", function(){
+    show(location.hash.replace("#",""), false);
+  });
+  // jump to the analyser as soon as a result arrives
+  window.gotoAnalyse = function(){ show("analyse", true); };
+  show(location.hash.replace("#","") || "overview", false);
+})();
+
+/* ── theme ── */
+(function(){
+  var SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  var MOON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+  var root = document.documentElement, icon = document.getElementById("themeicon");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    icon.innerHTML = (t === "dark") ? SUN : MOON;
+    try { localStorage.setItem("faultiva-theme", t); } catch(e){}
+  }
+  var saved = null;
+  try { saved = localStorage.getItem("faultiva-theme"); } catch(e){}
+  apply(saved || "light");
+  document.getElementById("theme").addEventListener("click", function(){
+    apply(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+})();
+
+  // ── upload control: reflect chosen filename ─────────────────────────
+  (function(){
+    var inp = document.getElementById('capture');
+    var nm  = document.getElementById('upname');
+    if(!inp || !nm) return;
+    function sync(){
+      if(inp.files && inp.files.length){
+        nm.textContent = inp.files[0].name;
+        nm.classList.add('has');
+      } else {
+        nm.textContent = 'No file selected';
+        nm.classList.remove('has');
+      }
+    }
+    inp.addEventListener('change', sync);
+    var clr = document.getElementById('clr-cap');
+    if(clr) clr.addEventListener('click', function(){ setTimeout(sync, 0); });
+    sync();
+  })();
+</script>
+
+</div>
+</body>
+</html>
