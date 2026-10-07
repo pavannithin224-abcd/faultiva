@@ -73,7 +73,21 @@ def meta() -> dict:
 
 
 def net_of(family: str, site: int):
-    """Real net name and site category, where the campaign recorded them."""
+    """Real net name and site category, where they were recorded.
+
+    For a user circuit the name comes from its own sites.npz.  Those are yosys
+    cell names rather than RTL signal names - the campaign's extra net-name
+    table is specific to the bundled circuits - so they look like
+    `$abc$350$auto$blifparse...` and are still enough to find the gate.
+    """
+    f = engine()
+    own = getattr(f, "_user_sites", {}).get(family)
+    if own is not None:
+        names = own.get("cell_name")
+        if names is not None and 0 <= site < names.shape[0]:
+            return (str(names[site]) or None), "USER_CHARACTERIZED"
+        return None, "USER_CHARACTERIZED"
+
     m = meta()
     nt = m.get("net", {}).get(family)
     ct = m.get("cat", {}).get(family)
@@ -95,16 +109,23 @@ def engine() -> Faultiva:
 
 
 # --------------------------------------------------------------- parsing
-def parse_capture(raw: bytes, n_vectors: int, label: str) -> dict[str, np.ndarray]:
+def parse_capture(raw: bytes, n_vectors: int, label: str,
+                  width: int = 32) -> dict[str, np.ndarray]:
     """Read a capture file.
 
     Accepted layouts, one record per line:
 
-        <64 hex chars>                                  response only
-        <64 hex chars> <timeout> <protocol> <cycles>    full four-channel record
+        <hex response>                                  response only
+        <hex response> <timeout> <protocol> <cycles>    full four-channel record
+
+    `width` is the circuit's response size in bytes, so the hex field is
+    2*width characters.  The four bundled circuits are 32 bytes; a user
+    circuit can be any width, and rejecting its own capture because of a
+    hardcoded 64 would be a bug in the dashboard rather than the file.
 
     Comment lines starting with '#' and blank lines are ignored.
     """
+    digits = width * 2
     try:
         text = raw.decode("utf-8", errors="replace")
     except Exception as exc:
@@ -119,7 +140,7 @@ def parse_capture(raw: bytes, n_vectors: int, label: str) -> dict[str, np.ndarra
             f"{label}: {len(rows)} records but this circuit's vector plan has "
             f"{n_vectors}. A capture must cover the whole plan.")
 
-    response = np.zeros((n_vectors, 32), dtype=np.uint8)
+    response = np.zeros((n_vectors, width), dtype=np.uint8)
     timeout = np.zeros(n_vectors, dtype=np.uint8)
     protocol = np.zeros(n_vectors, dtype=np.uint8)
     cycles = np.zeros(n_vectors, dtype=np.int32)
@@ -128,10 +149,11 @@ def parse_capture(raw: bytes, n_vectors: int, label: str) -> dict[str, np.ndarra
     for i, row in enumerate(rows):
         parts = row.replace(",", " ").split()
         hexpart = parts[0]
-        if len(hexpart) != 64:
+        if len(hexpart) != digits:
             raise ValueError(
-                f"{label} line {i + 1}: expected 64 hex characters "
-                f"(32 response bytes), got {len(hexpart)}")
+                f"{label} line {i + 1}: expected {digits} hex characters "
+                f"({width} response bytes) for this circuit, "
+                f"got {len(hexpart)}")
         try:
             response[i] = np.frombuffer(bytes.fromhex(hexpart), dtype=np.uint8)
         except ValueError:
@@ -212,19 +234,108 @@ def identify(netlist: dict, known: list[str]) -> tuple[str | None, str]:
     return None, f"no characterized circuit matches '{modules[0]}'"
 
 
+def _user_example_capture(f, family: str) -> dict | None:
+    """Re-simulate one catalogued fault to produce an uploadable capture.
+
+    Returns None when the circuit's simulator binary is no longer on disk.
+    """
+    import csv as _csv
+    import subprocess
+    import tempfile
+
+    info = f.circuit_info(family)
+    root = Path(info.get("path", ""))
+    binary = root / "work/obj_dir/sim"
+    if not binary.is_file():
+        return None
+
+    cat = np.load(root / "catalogue.npz", allow_pickle=False)
+    sizes = np.diff(cat["offsets"])
+    unique = np.flatnonzero(sizes == 1)
+    if unique.size == 0:
+        return None
+    # a deterministic pick, so the same circuit always offers the same example
+    group = int(unique[unique.size // 2])
+    start = int(cat["offsets"][group])
+    site = int(cat["sites"][start])
+    stuck = int(cat["stuck"][start])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "capture.csv"
+        try:
+            proc = subprocess.run(
+                [str(binary), "+MODE=CAMPAIGN", f"+CSV={out}",
+                 "+BATCH_ID=0", f"+SITE_START={site}", "+SITE_COUNT=1"],
+                capture_output=True, text=True, timeout=600)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if proc.returncode != 0 or not out.is_file():
+            return None
+        with open(out, newline="", encoding="utf-8") as handle:
+            all_rows = list(_csv.DictReader(handle))
+        rows = [r for r in all_rows
+                if r["run_type"] == "ENABLED" and int(r["stuck"]) == stuck]
+        # the cycles column in a capture file is a DELTA from fault-free, which
+        # is what the signature hashes - the same convention the bundled
+        # example captures use
+        baseline = {int(r["vector"]): int(r["cycles"])
+                    for r in all_rows if r["run_type"] == "BASELINE"}
+
+    if not rows:
+        return None
+    rows.sort(key=lambda r: int(r["vector"]))
+    width = int(info.get("response_bytes", 32))
+    digits = width * 2
+
+    lines = [
+        f"# Faultiva capture  |  circuit: {family}  |  {len(rows)} vectors",
+        f"# response({digits} hex)  timeout  protocol  cycle_delta",
+        "# re-simulated on demand from this circuit's own catalogue",
+    ]
+    for r in rows:
+        resp = r["response"].strip()[-digits:]
+        vector = int(r["vector"])
+        delta = int(r["cycles"]) - baseline.get(vector, 0)
+        lines.append(f"{resp} {int(r['timed_out'])} "
+                     f"{int(r['protocol_error'])} {delta}")
+
+    return {"circuit": family, "vectors": len(rows),
+            "filename": f"{family}__example_capture.txt",
+            "text": "\n".join(lines) + "\n",
+            "note": "generated from this circuit's catalogue; the fault "
+                    "identity is not included"}
+
 # --------------------------------------------------------------- routes
 async def api_circuits(request: Request) -> JSONResponse:
     f = engine()
     out = []
     for c in f.families:
         sizes = np.diff(f._offsets[c])
-        out.append({
+        user = f.is_user_circuit(c)
+        try:
+            vectors = f.vectors(c)
+        except Exception:                                       # noqa: BLE001
+            vectors = None
+        entry = {
             "id": c,
             "signatures": int(f.signature_count(c)),
-            "vectors": f.vectors(c) if c in f._vectors else None,
+            "vectors": vectors,
             "uniquely_localizable": round(float((sizes == 1).mean()), 4),
             "largest_set": int(sizes.max()),
-        })
+            "sites": int(sizes.sum()),
+            "source": "user" if user else "bundled",
+        }
+        if user:
+            info = f.circuit_info(c)
+            entry["characterized"] = info.get("created_utc")
+            entry["synthesis"] = info.get("synthesis")
+            entry["golden_source"] = info.get("golden_source")
+            entry["verification"] = "OUT_OF_SCOPE"
+        else:
+            entry["evidence"] = "CircuitSage V2.2 frozen campaign"
+            entry["verification"] = ("in scope" if c == "opentitan_hmac_sha256"
+                                    else "OUT_OF_SCOPE")
+        out.append(entry)
     return JSONResponse({"circuits": out, "repository": REPO_URL})
 
 
@@ -232,6 +343,16 @@ async def api_example(request: Request) -> JSONResponse:
     """Return a real campaign capture, formatted as an uploadable file."""
     f = engine()
     family = request.query_params.get("circuit", "secworks_sha256")
+    if f.is_user_circuit(family):
+        payload = _user_example_capture(f, family)
+        if payload is None:
+            return JSONResponse(
+                {"error": f"{family} was characterized but its simulator is "
+                          "gone; re-run characterization to regenerate example "
+                          "captures, or upload your own measured capture"},
+                status_code=404)
+        return JSONResponse(payload)
+
     caps = np.load(Path(f.root) / "data/faultiva_example_captures.npz",
                    allow_pickle=True)
     if f"{family}__response" not in caps:
@@ -304,7 +425,9 @@ async def api_analyse(request: Request) -> JSONResponse:
     if len(raw) > MAX_BYTES:
         return JSONResponse({"error": "capture exceeds 64 MB"}, 413)
     try:
-        cap = parse_capture(raw, f.vectors(family), "capture")
+        golden_ref = f.golden(family)
+        cap = parse_capture(raw, f.vectors(family), "capture",
+                            width=int(golden_ref.shape[1]))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, 400)
 
@@ -347,16 +470,12 @@ async def api_analyse(request: Request) -> JSONResponse:
         result["elapsed_ms"] = round((time.perf_counter() - t0) * 1000, 1)
         return JSONResponse(result)
 
-    m = meta()
-    # recover the polarity slice for this signature
-    z = np.load(Path(f.root) / "models/faultiva_signature_dictionary.npz",
-                allow_pickle=True)
-    sigs = z[f"{family}__signatures"]
-    offs = z[f"{family}__offsets"]
-    i = int(np.searchsorted(sigs, key))
-    a, b = int(offs[i]), int(offs[i + 1])
-    stuck = m["stuck"].get(family)
-    pol = stuck[a:b] if stuck is not None else np.zeros(b - a, dtype=np.uint8)
+    # stuck-at polarity per candidate, via the engine so both catalogue
+    # layouts work: bundled circuits store hex-string signatures, user
+    # circuits store raw bytes
+    pol = f.localize_stuck(family, key)
+    if pol.size != sites.size:
+        pol = np.zeros(sites.size, dtype=np.uint8)
     kinds = sorted({int(x) for x in pol.tolist()})
     type_names = ["SA0" if k == 0 else "SA1" for k in kinds]
 
@@ -409,7 +528,20 @@ async def api_analyse(request: Request) -> JSONResponse:
 
 
 def cell_of(family: str, site: int) -> str | None:
-    """Cell type driving a candidate site, when a table is available."""
+    """Cell type driving a candidate site, when a table is available.
+
+    User-characterized circuits carry their own sites.npz, loaded by the engine
+    as _user_sites; the bundled encoded table only covers bundled circuits.
+    """
+    f = engine()
+    own = getattr(f, "_user_sites", {}).get(family)
+    if own is not None:
+        types = own.get("cell_type")
+        if types is not None and 0 <= site < types.shape[0]:
+            value = str(types[site])
+            return value or None
+        return None
+
     m = meta()
     table = m.get("cell_code", {}).get(family)
     vocab = m.get("vocab", [])

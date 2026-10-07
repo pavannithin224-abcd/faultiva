@@ -216,6 +216,13 @@
   .upname{font-family:var(--mono);font-size:12px;color:var(--mut);
     overflow-wrap:anywhere;min-width:0}
   .upname.has{color:var(--fg);font-weight:600}
+  .srcbadge{display:inline-block;padding:1px 7px;margin-right:7px;
+    border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.03em;
+    text-transform:uppercase;vertical-align:1px;border:1px solid}
+  .srcbadge.bundled{color:var(--mut);border-color:var(--bd);
+    background:var(--panel2)}
+  .srcbadge.user{color:var(--acc);border-color:var(--acc);
+    background:color-mix(in srgb, var(--acc) 9%, transparent)}
   .clear:hover{text-decoration:underline}
   .empty{color:var(--mut);font-size:14px;padding:56px 24px;text-align:center;
          border:1px dashed var(--line);border-radius:8px;background:var(--panel)}
@@ -487,7 +494,7 @@ a3f1c92b…9c22                                                   0        0    
               <span class="upname" id="upname">No file selected</span>
             </div>
             <p class="hint">One line per test vector:
-              <code>response(64 hex) timeout protocol cycles</code>.
+              <code>response(hex) timeout protocol cycles</code>.
               <span class="clear" id="clr-cap">clear</span><br>
               <button type="button" class="linkbtn" id="dl-example">Download a real example capture</button>
             </p>
@@ -577,10 +584,19 @@ $("#circuit").addEventListener("change", meta);
 function meta() {
   const c = CIRCUITS.find(x => x.id === $("#circuit").value);
   if (!c) return;
-  $("#circuit-meta").textContent =
-    `${c.signatures.toLocaleString()} catalogued signatures · `
-    + `${c.vectors} vectors · `
-    + `${(c.uniquely_localizable * 100).toFixed(0)}% resolve to one site`;
+  const meta = $("#circuit-meta");
+  meta.innerHTML = "";
+  const badge = document.createElement("span");
+  badge.className = "srcbadge " + (c.source === "user" ? "user" : "bundled");
+  badge.textContent = c.source === "user" ? "your circuit" : "bundled";
+  badge.title = c.source === "user"
+    ? "characterized on this machine with faultiva.characterize"
+    : "from the CircuitSage V2.2 frozen campaign";
+  meta.appendChild(badge);
+  meta.appendChild(document.createTextNode(
+    `${c.signatures.toLocaleString()} signatures \u00b7 `
+    + `${c.vectors ? c.vectors + " vectors \u00b7 " : ""}`
+    + `${(c.uniquely_localizable * 100).toFixed(0)}% resolve to one site`));
 }
 
 $("#dl-example").addEventListener("click", async () => {

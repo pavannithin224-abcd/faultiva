@@ -17,7 +17,8 @@ catalogued keys exactly.
 
 Why the shape matters
 ---------------------
-``response_xor`` must be (vectors, 32) uint8 and the three flag channels must be
+``response_xor`` must be (vectors, response_bytes) uint8 and the three flag
+channels must be
 (vectors,) with dtypes int32/uint8/uint8. The digest is taken over raw bytes, so
 a wrong dtype or a transposed array silently produces a different key that will
 never match the catalogue.
@@ -34,7 +35,10 @@ import numpy as np
 
 __all__ = ["signature_digest", "signature_from_responses", "N_RESPONSE_BYTES"]
 
-#: width of a response record in bytes, fixed by the frozen vector plan
+#: response width in bytes for the four BUNDLED circuits, fixed by the frozen
+#: V2.2 vector plan.  It is not a property of the signature scheme: a
+#: user-characterized circuit may have any response width, and
+#: signature_digest() hashes whatever it is given.
 N_RESPONSE_BYTES = 32
 
 
@@ -67,8 +71,10 @@ def signature_from_responses(family_id: str,
                              protocol_error: np.ndarray | None = None) -> str:
     """Build a catalogue key from captured response bytes.
 
-    ``observed`` and ``golden`` are (vectors, 32) uint8 arrays of response
-    bytes. The three optional channels default to zeros, which is correct for a
+    ``observed`` and ``golden`` are (vectors, response_bytes) uint8 arrays.
+    Response width is a property of the circuit - 32 bytes for the four bundled
+    circuits, whatever the design produces for a characterized one - so the two
+    arrays need only agree with each other. The three optional channels default to zeros, which is correct for a
     circuit that produced wrong data but completed normally — the common case
     for a functional stuck-at fault.
 
@@ -82,8 +88,8 @@ def signature_from_responses(family_id: str,
     if observed.shape != golden.shape:
         raise ValueError(f"observed {observed.shape} and golden {golden.shape} "
                          f"must have the same shape")
-    if observed.ndim != 2 or observed.shape[1] != N_RESPONSE_BYTES:
-        raise ValueError(f"expected (vectors, {N_RESPONSE_BYTES}) response bytes, "
+    if observed.ndim != 2 or observed.shape[1] < 1:
+        raise ValueError(f"expected a (vectors, response_bytes) array, "
                          f"got {observed.shape}")
 
     vectors = observed.shape[0]

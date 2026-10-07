@@ -243,16 +243,69 @@ class Faultiva:
 
     # ---------------- stage 2: localization ----------------
     def localize(self, family: str, signature: str) -> np.ndarray:
+        """Candidate sites for a behaviour signature, or an empty array.
+
+        Handles both catalogue layouts: bundled circuits store sorted hex
+        strings of shape (N,), user-characterized circuits store sorted raw
+        bytes of shape (N, 32).
+        """
         if family not in self._sig:
             raise KeyError(f"unknown circuit family {family!r}; "
                            f"known: {self.families}")
         sig = self._sig[family]
-        idx = np.searchsorted(sig, signature)
-        if idx >= sig.size or sig[idx] != signature:
-            return np.empty(0, dtype=np.int64)
+        groups = int(self._offsets[family].shape[0] - 1)
+
+        if sig.ndim == 2:
+            # raw-byte rows: binary search over 32-byte keys
+            needle = np.frombuffer(bytes.fromhex(signature), dtype=np.uint8)
+            if needle.size != sig.shape[1]:
+                return np.empty(0, dtype=np.int64)
+            lo, hi = 0, groups
+            idx = -1
+            while lo < hi:
+                mid = (lo + hi) // 2
+                row = sig[mid]
+                if np.array_equal(row, needle):
+                    idx = mid
+                    break
+                # lexicographic compare on the first differing byte
+                diff = np.flatnonzero(row != needle)
+                if row[diff[0]] < needle[diff[0]]:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            if idx < 0:
+                return np.empty(0, dtype=np.int64)
+        else:
+            idx = int(np.searchsorted(sig, signature))
+            if idx >= groups or sig[idx] != signature:
+                return np.empty(0, dtype=np.int64)
+
         start = self._offsets[family][idx]
         end = self._offsets[family][idx + 1]
         return self._sites[family][start:end]
+
+    def localize_stuck(self, family: str, signature: str) -> np.ndarray:
+        """Stuck-at polarity per candidate, when the catalogue records it."""
+        if family not in self._stuck:
+            return np.empty(0, dtype=np.uint8)
+        sig = self._sig[family]
+        groups = int(self._offsets[family].shape[0] - 1)
+        if sig.ndim == 2:
+            needle = np.frombuffer(bytes.fromhex(signature), dtype=np.uint8)
+            matches = np.flatnonzero(
+                (sig == needle).all(axis=1)) if needle.size == sig.shape[1] \
+                else np.empty(0, dtype=np.int64)
+            if matches.size == 0:
+                return np.empty(0, dtype=np.uint8)
+            idx = int(matches[0])
+        else:
+            idx = int(np.searchsorted(sig, signature))
+            if idx >= groups or sig[idx] != signature:
+                return np.empty(0, dtype=np.uint8)
+        start = self._offsets[family][idx]
+        end = self._offsets[family][idx + 1]
+        return self._stuck[family][start:end]
 
     # ---------------- stage 3: verification ----------------
     def verify(self, family: str, nodes, stuck_value: int,
