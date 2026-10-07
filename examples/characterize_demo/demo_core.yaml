@@ -1,0 +1,27 @@
+# A minimal Faultiva characterization config.
+#
+#   python -m faultiva.characterize --config examples/characterize_demo/demo_core.yaml --check
+#   python -m faultiva.characterize --config examples/characterize_demo/demo_core.yaml
+#
+# Takes about ten seconds and produces user_circuits/demo_core/.
+
+circuit: demo_core          # lowercase id; becomes the directory name
+top: demo_core              # top module inside the RTL
+rtl:
+  - rtl/demo_core.v         # paths are relative to this file
+
+clock: clk
+reset: {name: reset_n, active_low: true}
+
+protocol: simple_handshake
+start: {name: init, pulse: true}   # driven high for one cycle, then released
+done: ready                        # polled until asserted
+
+inputs:                            # fresh deterministic stimulus per vector
+  - {name: key,   width: 64}
+  - {name: block, width: 32}
+
+output: {name: result, width: 32}  # compared against the fault-free reference
+
+vectors: 8                         # small so the demo is quick; 64 is typical
+cycle_budget: 40                   # the design needs ~6, so this is generous

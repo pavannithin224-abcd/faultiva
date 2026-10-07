@@ -60,7 +60,8 @@ class FaultivaResult:
 class Faultiva:
     """The shipped hybrid fault detection and localization pipeline."""
 
-    def __init__(self, package_root: Path | None = None) -> None:
+    def __init__(self, package_root: Path | None = None,
+                 user_circuits: Path | str | None = None) -> None:
         self.root = Path(package_root) if package_root else PKG
         self.features = FeaturePipeline(self.root)
 
@@ -70,10 +71,32 @@ class Faultiva:
         self._sig = {}
         self._sites = {}
         self._offsets = {}
+        self._stuck = {}
         for fam in self.families:
             self._sig[fam] = d[f"{fam}__signatures"]
             self._sites[fam] = d[f"{fam}__sites"]
             self._offsets[fam] = d[f"{fam}__offsets"]
+            if f"{fam}__stuck" in d:
+                self._stuck[fam] = d[f"{fam}__stuck"]
+
+        # ---- user-characterized circuits -------------------------------
+        # Produced by faultiva.characterize.  The bundled dictionary above is
+        # frozen evidence and is never modified; these are merged alongside it.
+        self.user_circuits: dict[str, dict] = {}
+        self._user_golden: dict[str, np.ndarray] = {}
+        self._user_cycles: dict[str, np.ndarray] = {}
+        self._user_sites: dict[str, dict] = {}
+        user_root = Path(user_circuits) if user_circuits is not None \
+            else self.root / "user_circuits"
+        if user_root.is_dir():
+            for entry in sorted(user_root.iterdir()):
+                if not entry.is_dir():
+                    continue
+                try:
+                    self._load_user_circuit(entry)
+                except Exception as exc:                        # noqa: BLE001
+                    # a broken user catalogue must not break the bundled ones
+                    self.user_circuits[entry.name] = {"error": str(exc)}
 
         gb = self.root / "data/faultiva_golden_baselines.npz"
         if gb.is_file():
@@ -90,6 +113,51 @@ class Faultiva:
             (self.root / "models/hmac_final_diagnostic_model_lock_11d2d.json")
             .read_text(encoding="utf-8"))["threshold"])
 
+    def _load_user_circuit(self, directory: Path) -> None:
+        """Merge one characterized circuit into this engine."""
+        manifest = json.loads((directory / "manifest.json")
+                              .read_text(encoding="utf-8"))
+        name = str(manifest["circuit"])
+        if name in self.families:
+            raise ValueError(
+                f"user circuit '{name}' collides with a bundled circuit name")
+
+        cat = np.load(directory / "catalogue.npz", allow_pickle=False)
+        gold = np.load(directory / "golden.npz", allow_pickle=False)
+
+        # the bundled dictionary stores sites only; user catalogues also carry
+        # stuck-at polarity, which the dashboard already knows how to show
+        self._sig[name] = cat["signatures"]
+        self._sites[name] = cat["sites"]
+        self._offsets[name] = cat["offsets"]
+        self._stuck[name] = cat["stuck"]
+        self._user_golden[name] = gold["golden"]
+        self._user_cycles[name] = gold["cycles"]
+
+        sites_path = directory / "sites.npz"
+        if sites_path.is_file():
+            meta = np.load(sites_path, allow_pickle=True)
+            self._user_sites[name] = {
+                "cell_name": meta["cell_name"],
+                "cell_type": meta["cell_type"],
+            }
+
+        manifest["path"] = str(directory)
+        self.user_circuits[name] = manifest
+        self.families.append(name)
+
+    def is_user_circuit(self, family: str) -> bool:
+        return family in self.user_circuits
+
+    def circuit_info(self, family: str) -> dict:
+        """Provenance for one circuit: bundled evidence or user-characterized."""
+        if family in self.user_circuits:
+            m = dict(self.user_circuits[family])
+            m["source"] = "user"
+            return m
+        return {"circuit": family, "source": "bundled",
+                "evidence": "CircuitSage V2.2 frozen campaign"}
+
     @property
     def model(self):
         if self._model is None:
@@ -102,7 +170,14 @@ class Faultiva:
         return self._threshold
 
     def signature_count(self, family: str) -> int:
-        return int(self._sig[family].size)
+        """Number of distinct behaviour signatures for this circuit.
+
+        Counts offset groups rather than array elements: bundled catalogues
+        store signatures as hex strings, shape (N,), while user catalogues
+        store raw bytes, shape (N, 32).  `.size` would report N*32 for the
+        latter.
+        """
+        return int(self._offsets[family].shape[0] - 1)
 
     # ---------------- stage 1: detection ----------------
     @staticmethod
@@ -135,6 +210,8 @@ class Faultiva:
 
     # ---------------- catalogue keys ----------------
     def golden(self, family: str) -> np.ndarray:
+        if family in self._user_golden:
+            return self._user_golden[family]
         """Fault-free reference responses for a characterized circuit.
 
         Shape is (vectors, 32) uint8. Raises if the family is not shipped with
@@ -146,6 +223,8 @@ class Faultiva:
         return self._golden[family]
 
     def vectors(self, family: str) -> int:
+        if family in self._user_golden:
+            return int(self._user_golden[family].shape[0])
         """Number of vectors in the frozen plan for this circuit."""
         return self._vectors[family]
 

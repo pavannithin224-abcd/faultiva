@@ -60,6 +60,14 @@ class Signal:
     pulse: bool = False
 
 
+@dataclass(frozen=True)
+class Constant:
+    """An input pin held at a fixed value for the whole campaign."""
+    name: str
+    width: int
+    value: int
+
+
 @dataclass
 class CircuitConfig:
     """A validated description of a third-party circuit."""
@@ -76,7 +84,11 @@ class CircuitConfig:
     output: Port
     vectors: int
     cycle_budget: int
+    constants: list[Constant] = field(default_factory=list)
     seed: str = ""
+    synthesis_script: str = ""
+    abc_gates: str = "AND,OR,XOR,MUX"
+    opt_clean: bool = True
     include_dirs: list[Path] = field(default_factory=list)
     defines: dict[str, str] = field(default_factory=dict)
     notes: str = ""
@@ -92,7 +104,8 @@ class CircuitConfig:
 
     def port_names(self) -> list[str]:
         return ([self.clock, self.reset.name, self.start.name, self.done.name]
-                + [p.name for p in self.inputs] + [self.output.name])
+                + [p.name for p in self.inputs]
+                + [c.name for c in self.constants] + [self.output.name])
 
 
 # --------------------------------------------------------------------- helpers
@@ -134,6 +147,37 @@ def _width(value: Any, where: str) -> int:
     return value
 
 
+def _constant(value: Any, where: str) -> "Constant":
+    """A held input: {name, width, value}."""
+    if not isinstance(value, dict):
+        raise ConfigError(
+            f"{where}: expected a mapping with 'name', 'width' and 'value'")
+    unknown = set(value) - {"name", "width", "value"}
+    if unknown:
+        raise ConfigError(f"{where}: unknown key(s) {sorted(unknown)}")
+    name = _ident(_req(value, "name", where), f"{where}.name")
+    width = _width(_req(value, "width", where), f"{where}.width")
+    raw = _req(value, "value", where)
+    if isinstance(raw, bool):
+        held = 1 if raw else 0
+    elif isinstance(raw, int):
+        held = raw
+    elif isinstance(raw, str):
+        try:
+            held = int(raw, 0)
+        except ValueError as exc:
+            raise ConfigError(
+                f"{where}.value: '{raw}' is not an integer literal") from exc
+    else:
+        raise ConfigError(f"{where}.value: expected an integer, got {raw!r}")
+    if held < 0:
+        raise ConfigError(f"{where}.value: must be >= 0, got {held}")
+    if held >= (1 << width):
+        raise ConfigError(
+            f"{where}.value: {held} does not fit in {width} bit(s)")
+    return Constant(name, width, held)
+
+
 def _port(value: Any, where: str) -> Port:
     if not isinstance(value, dict):
         raise ConfigError(f"{where}: expected a mapping with 'name' and 'width'")
@@ -155,7 +199,8 @@ def parse_config(raw: dict[str, Any], base_dir: Path) -> CircuitConfig:
 
     known = {"circuit", "top", "rtl", "clock", "reset", "protocol", "start",
              "done", "inputs", "output", "vectors", "cycle_budget", "seed",
-             "include_dirs", "defines", "notes"}
+             "include_dirs", "defines", "notes", "constants",
+             "synthesis_script", "abc_gates", "opt_clean"}
     unknown = set(raw) - known
     if unknown:
         raise ConfigError(f"unknown top-level key(s) {sorted(unknown)}; "
@@ -220,6 +265,12 @@ def parse_config(raw: dict[str, Any], base_dir: Path) -> CircuitConfig:
     inputs = [_port(v, f"inputs[{i}]") for i, v in enumerate(inputs_raw)]
     output = _port(_req(raw, "output", "config"), "output")
 
+    constants_raw = raw.get("constants", []) or []
+    if not isinstance(constants_raw, list):
+        raise ConfigError("constants: expected a list of {name, width, value}")
+    constants = [_constant(v, f"constants[{i}]")
+                 for i, v in enumerate(constants_raw)]
+
     # -- numeric budgets ---------------------------------------------------
     vectors = _req(raw, "vectors", "config")
     if isinstance(vectors, bool) or not isinstance(vectors, int) or not 1 <= vectors <= MAX_VECTORS:
@@ -233,7 +284,12 @@ def parse_config(raw: dict[str, Any], base_dir: Path) -> CircuitConfig:
         circuit=circuit, top=top, rtl=rtl, clock=clock, reset=reset,
         protocol=protocol, start=start, done=done, inputs=inputs,
         output=output, vectors=vectors, cycle_budget=budget,
-        seed=str(raw.get("seed", "") or ""), include_dirs=include_dirs,
+        constants=constants,
+        seed=str(raw.get("seed", "") or ""),
+        synthesis_script=str(raw.get("synthesis_script", "") or ""),
+        abc_gates=str(raw.get("abc_gates", "AND,OR,XOR,MUX")),
+        opt_clean=bool(raw.get("opt_clean", True)),
+        include_dirs=include_dirs,
         defines=defines, notes=str(raw.get("notes", "") or ""),
     )
     _cross_check(cfg)
@@ -265,6 +321,15 @@ def _cross_check(cfg: CircuitConfig) -> None:
 
     if cfg.reset.name == cfg.clock:
         raise ConfigError("reset and clock cannot be the same signal")
+
+    if cfg.synthesis_script:
+        for token in ("{sources}", "{top}", "{json_out}"):
+            if token not in cfg.synthesis_script:
+                raise ConfigError(
+                    f"synthesis_script must contain {token} - the runner "
+                    "substitutes the source list, top module and output path")
+    if not cfg.abc_gates.strip():
+        raise ConfigError("abc_gates cannot be empty")
 
 
 def load_config(path: Path) -> CircuitConfig:

@@ -18,14 +18,15 @@ SCOPE: `simple_handshake` interfaces only.  See config.py.
 """
 from __future__ import annotations
 
-from .config import (CircuitConfig, ConfigError, Port, Signal,
+from .config import (CircuitConfig, ConfigError, Constant, Port, Signal,
                      SUPPORTED_PROTOCOLS, load_config, parse_config)
 from .netlist import (NetlistError, canonical_json, enumerate_sites,
                       instrument_netlist, load_netlist, maximum_net_bit,
                       site_summary)
 
 __all__ = [
-    "CircuitConfig", "ConfigError", "Port", "Signal", "SUPPORTED_PROTOCOLS",
+    "CircuitConfig", "ConfigError", "Constant", "Port", "Signal",
+    "SUPPORTED_PROTOCOLS",
     "load_config", "parse_config",
     "NetlistError", "canonical_json", "enumerate_sites", "instrument_netlist",
     "load_netlist", "maximum_net_bit", "site_summary",
