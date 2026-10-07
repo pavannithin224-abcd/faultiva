@@ -579,9 +579,23 @@ async def index(request: Request) -> FileResponse:
                         headers={"Cache-Control": "no-store, must-revalidate"})
 
 
+# characterization endpoints live in their own module: they shell out to
+# Yosys and Verilator, which is a different risk profile from diagnosis
+from characterize_api import (            # noqa: E402
+    api_toolchain, api_preflight, api_characterize,
+    api_characterize_status, api_characterize_cancel, api_config_template,
+)
+
 routes = [
     Route("/", index),
     Route("/api/circuits", api_circuits),
+    Route("/api/toolchain", api_toolchain),
+    Route("/api/config-template", api_config_template),
+    Route("/api/preflight", api_preflight, methods=["POST"]),
+    Route("/api/characterize", api_characterize, methods=["POST"]),
+    Route("/api/characterize/status", api_characterize_status),
+    Route("/api/characterize/cancel", api_characterize_cancel,
+          methods=["POST"]),
     Route("/api/example", api_example),
     Route("/api/analyse", api_analyse, methods=["POST"]),
     Mount("/static", StaticFiles(directory=HERE / "ui"), name="static"),
