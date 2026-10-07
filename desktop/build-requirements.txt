@@ -1,0 +1,9 @@
+pywebview
+pyinstaller
+numpy
+starlette
+uvicorn
+joblib
+scikit-learn
+pyyaml
+python-multipart

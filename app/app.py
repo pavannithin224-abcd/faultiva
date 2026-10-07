@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 import webbrowser
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,29 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parent if (HERE.parent / "faultiva").is_dir() else HERE
+
+
+def _payload_root() -> Path:
+    """Directory holding models/, data/ and docs/.
+
+    FAULTIVA_ROOT wins when it is set and plausible, because a frozen build
+    unpacks this file to _internal/app/ while the payload sits in _internal/ -
+    one level up, but without the `faultiva` package beside it that the
+    directory walk below looks for.
+    """
+    stated = os.environ.get("FAULTIVA_ROOT")
+    if stated:
+        root = Path(stated).resolve()
+        if (root / "models").is_dir() and (root / "data").is_dir():
+            return root
+
+    for cand in (HERE.parent, HERE):
+        if (cand / "models").is_dir() and (cand / "data").is_dir():
+            return cand
+    return HERE.parent if (HERE.parent / "faultiva").is_dir() else HERE
+
+
+REPO = _payload_root()
 sys.path.insert(0, str(REPO))
 
 from faultiva import Faultiva  # noqa: E402
