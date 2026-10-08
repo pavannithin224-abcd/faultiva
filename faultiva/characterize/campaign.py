@@ -40,6 +40,7 @@ from typing import Any
 import numpy as np
 
 from ..signatures import signature_digest
+from . import wslbridge
 from .config import CircuitConfig
 from .netlist import enumerate_sites, instrument_netlist, site_summary
 from .stimulus import stimulus_digest, write_mem_files
@@ -57,7 +58,12 @@ class CampaignError(RuntimeError):
 
 # ------------------------------------------------------------------ utilities
 def _tool(name: str, override: str | None = None) -> str:
-    """Locate yosys/verilator: explicit override, env var, then PATH."""
+    """Locate yosys/verilator: explicit override, env var, then PATH.
+
+    An override may name a tool inside WSL (`/usr/bin/yosys`); that path is
+    not resolvable on Windows and must not be checked against the local
+    filesystem.  `_run` is what knows how to reach it.
+    """
     if override:
         return override
     env = os.environ.get(f"FAULTIVA_{name.upper()}")
@@ -71,12 +77,33 @@ def _tool(name: str, override: str | None = None) -> str:
     return found
 
 
+# How external commands reach the tools.  Set once per campaign by
+# `use_bridge`, read by every `_run`; worker threads only read it.
+_BRIDGE = wslbridge.DIRECT
+
+
+def use_bridge(yosys: str, verilator: str) -> "wslbridge.Bridge":
+    """Work out how to reach the tools, and remember it for this process.
+
+    Both entry points call this: `characterize` for a full run, `synthesize`
+    for the preflight check, which does not go through `characterize`.
+    """
+    global _BRIDGE
+    _BRIDGE = wslbridge.detect(yosys, verilator)
+    return _BRIDGE
+
+
+def active_bridge() -> "wslbridge.Bridge":
+    return _BRIDGE
+
+
 def _run(command: list[str], log: Path, timeout: int) -> int:
+    argv = _BRIDGE.command([str(part) for part in command])
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "w", encoding="utf-8", errors="replace") as handle:
-        handle.write("$ " + " ".join(command) + "\n\n")
+        handle.write("$ " + " ".join(argv) + "\n\n")
         handle.flush()
-        proc = subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT,
+        proc = subprocess.run(argv, stdout=handle, stderr=subprocess.STDOUT,
                               timeout=timeout)
     return proc.returncode
 
@@ -104,6 +131,8 @@ def _hex_to_bytes(text: str, width: int) -> np.ndarray:
 
 # -------------------------------------------------------------------- phases
 def synthesize(cfg: CircuitConfig, work: Path, yosys: str) -> Path:
+    """Run yosys.  Establishes the bridge when called outside a campaign."""
+    use_bridge(yosys, yosys)
     netlist = work / f"{cfg.circuit}_generic.json"
     sources = " ".join(f"-sv {p}" if p.suffix in (".sv", ".svh") else str(p)
                        for p in cfg.rtl)
@@ -243,6 +272,16 @@ def characterize(cfg: CircuitConfig, out_root: Path, *,
     """Characterize a circuit end to end.  Returns the manifest."""
     yosys_bin = _tool("yosys", yosys)
     verilator_bin = _tool("verilator", verilator)
+
+    # On Windows the tools usually live inside WSL; find out before phase one
+    # so a broken distribution is reported now rather than mid-campaign.
+    bridge = use_bridge(yosys_bin, verilator_bin)
+    if bridge.active:
+        problem = wslbridge.check(bridge, yosys_bin, verilator_bin)
+        if problem:
+            raise CampaignError(
+                f"the build tools are installed in WSL ({bridge.distro}) but "
+                f"could not be run: {problem}")
 
     out_dir = Path(out_root) / cfg.circuit
     work = Path(work_dir) if work_dir else out_dir / "work"

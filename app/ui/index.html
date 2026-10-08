@@ -182,8 +182,22 @@
   .lim p{margin:0;font-size:13.5px;color:var(--mut);line-height:1.55}
 
   /* ───────────── analyser (classes used by the app JS) ───────────── */
-  .tool{display:grid;grid-template-columns:330px 1fr;gap:34px;align-items:start}
-  @media(max-width:900px){.tool{grid-template-columns:1fr}}
+  /* Input across the top, result underneath - side by side squeezed both.
+     Scoped to the section so a later bare `.tool` rule cannot take it back. */
+  #view-analyse .tool{display:block}
+  #view-analyse .tool > form.panel{display:block;margin-bottom:24px}
+  #view-analyse .tool > #out{display:block;width:100%}
+  /* the form is wide, so its fields sit beside each other rather than
+     stacking into a mostly-empty panel */
+  .panel .body{display:grid;grid-template-columns:minmax(260px,340px) 1fr;
+               gap:2px 24px;align-items:start}
+  .panel .body > .field{margin-bottom:14px}
+  .panel .body > #run{grid-column:1 / -1;justify-self:end;width:auto;
+                      min-width:210px;margin-top:2px}
+  @media(max-width:760px){
+    .panel .body{grid-template-columns:1fr}
+    .panel .body > #run{justify-self:stretch;width:100%}
+  }
   .panel{border:1px solid var(--line);border-radius:8px;background:var(--panel);
          box-shadow:var(--shadow)}
   .panel>h2{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;
@@ -227,7 +241,7 @@
   .srcbadge.user{color:var(--acc);border-color:var(--acc);
     background:color-mix(in srgb, var(--acc) 9%, transparent)}
   .clear:hover{text-decoration:underline}
-  .empty{color:var(--mut);font-size:14px;padding:56px 24px;text-align:center;
+  .empty{color:var(--mut);font-size:14px;padding:40px 24px;text-align:center;
          border:1px dashed var(--line);border-radius:8px;background:var(--panel)}
   .empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:5px}
 
@@ -333,16 +347,19 @@
     border-left-color:var(--acc);font-weight:650}
   .side-sect{font-size:9.5px;letter-spacing:.09em;color:var(--faint);
              font-weight:700;padding:0 15px;margin:22px 0 6px}
-  .tool{padding:3px 15px;font:11px/1.5 var(--mono);color:var(--mut);
-        display:flex;align-items:center;gap:6px}
-  .tool .tdot{width:7px;height:7px;border-radius:50%;background:var(--faint);
-              flex-shrink:0}
-  .tool.yes .tdot{background:var(--ok)}
-  .tool.yes{color:var(--ok)}
-  .tool.no .tdot{background:var(--bad)}
-  .tool.no{color:var(--bad)}
-  .tool.old .tdot{background:var(--warn)}
-  .tool.old{color:var(--warn)}
+  /* toolchain status rows.  NOT `.tool` - the analyser owns that name for
+     its layout container, and a later `display:flex` here silently turned
+     that container back into a row. */
+  .tcrow{padding:3px 15px;font:11px/1.5 var(--mono);color:var(--mut);
+         display:flex;align-items:center;gap:6px}
+  .tcrow .tdot{width:7px;height:7px;border-radius:50%;background:var(--faint);
+               flex-shrink:0}
+  .tcrow.yes .tdot{background:var(--ok)}
+  .tcrow.yes{color:var(--ok)}
+  .tcrow.no .tdot{background:var(--bad)}
+  .tcrow.no{color:var(--bad)}
+  .tcrow.old .tdot{background:var(--warn)}
+  .tcrow.old{color:var(--warn)}
   .side-foot{margin-top:auto;padding:14px 15px}
   .side-foot .cta{display:block;text-align:center;margin-bottom:11px}
   .content{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -416,7 +433,7 @@
                white-space:nowrap}
     .snav .tab[aria-current="page"]{border-left-color:transparent;
       border-bottom-color:var(--acc)}
-    .side-sect,.tool,.side-foot{display:none}
+    .side-sect,.tcrow,.side-foot{display:none}
     .grid3,.pf-grid{grid-template-columns:1fr 1fr}
   }
 
@@ -438,6 +455,7 @@
   .drop .dtx{flex:1;min-width:0}
   .drop .dtx b{display:block;font-size:13.5px;color:var(--ink);
                font-weight:650;line-height:1.35}
+  .drop .dtx b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .drop .dtx span{display:block;font-family:var(--mono);font-size:11.5px;
                   color:var(--mut);overflow:hidden;text-overflow:ellipsis;
                   white-space:nowrap}
@@ -516,7 +534,7 @@
 
   <div class="side-sect">TOOLCHAIN</div>
   <div id="toolpanel">
-    <div class="tool"><span class="tdot"></span>checking…</div>
+    <div class="tcrow"><span class="tdot"></span>checking…</div>
   </div>
 
   <div class="side-foot">
@@ -1228,7 +1246,7 @@ function render(d) {
       ? (t.outdated ? t.name + " " + t.version + " \u2014 too old"
                     : t.name + " " + t.version)
       : t.name + " \u2014 not found";
-    return '<div class="tool ' + cls + '"><span class="tdot"></span>'
+    return '<div class="tcrow ' + cls + '"><span class="tdot"></span>'
          + esc2(txt) + '</div>';
   }
 
@@ -1292,7 +1310,7 @@ function render(d) {
     fetch("/api/toolchain").then(function(r){ return r.json(); })
       .then(paint).catch(function(){
         if (panel) panel.innerHTML =
-          '<div class="tool no"><span class="tdot"></span>unavailable</div>';
+          '<div class="tcrow no"><span class="tdot"></span>unavailable</div>';
       });
   }
   load();
