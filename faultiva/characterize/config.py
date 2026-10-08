@@ -89,6 +89,7 @@ class CircuitConfig:
     synthesis_script: str = ""
     abc_gates: str = "AND,OR,XOR,MUX"
     opt_clean: bool = True
+    flatten: bool = True
     include_dirs: list[Path] = field(default_factory=list)
     defines: dict[str, str] = field(default_factory=dict)
     notes: str = ""
@@ -200,7 +201,7 @@ def parse_config(raw: dict[str, Any], base_dir: Path) -> CircuitConfig:
     known = {"circuit", "top", "rtl", "clock", "reset", "protocol", "start",
              "done", "inputs", "output", "vectors", "cycle_budget", "seed",
              "include_dirs", "defines", "notes", "constants",
-             "synthesis_script", "abc_gates", "opt_clean"}
+             "synthesis_script", "abc_gates", "opt_clean", "flatten"}
     unknown = set(raw) - known
     if unknown:
         raise ConfigError(f"unknown top-level key(s) {sorted(unknown)}; "
@@ -289,6 +290,7 @@ def parse_config(raw: dict[str, Any], base_dir: Path) -> CircuitConfig:
         synthesis_script=str(raw.get("synthesis_script", "") or ""),
         abc_gates=str(raw.get("abc_gates", "AND,OR,XOR,MUX")),
         opt_clean=bool(raw.get("opt_clean", True)),
+        flatten=bool(raw.get("flatten", True)),
         include_dirs=include_dirs,
         defines=defines, notes=str(raw.get("notes", "") or ""),
     )

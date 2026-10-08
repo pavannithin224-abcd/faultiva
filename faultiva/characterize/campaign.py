@@ -134,8 +134,13 @@ def synthesize(cfg: CircuitConfig, work: Path, yosys: str) -> Path:
     """Run yosys.  Establishes the bridge when called outside a campaign."""
     use_bridge(yosys, yosys)
     netlist = work / f"{cfg.circuit}_generic.json"
+    # Sorted, not as supplied: yosys optimizes differently depending on the
+    # order it reads files, so the same design picked in a different order
+    # would otherwise synthesize to a different netlist and a different
+    # catalogue.  Which file a dialog listed first is not a design decision.
+    ordered = sorted(cfg.rtl, key=lambda p: (p.name, str(p)))
     sources = " ".join(f"-sv {p}" if p.suffix in (".sv", ".svh") else str(p)
-                       for p in cfg.rtl)
+                       for p in ordered)
     incs = "".join(f" -I{d}" for d in cfg.include_dirs)
     defs = "".join(f" -D{k}={v}" for k, v in cfg.defines.items())
     if cfg.synthesis_script:
@@ -147,10 +152,14 @@ def synthesize(cfg: CircuitConfig, work: Path, yosys: str) -> Path:
                   .replace("{json_out}", str(netlist)))
     else:
         tail = "opt_clean; " if cfg.opt_clean else ""
+        # `flatten` matches the frozen 12C-1E recipe.  Without it a
+        # hierarchical design enumerates only the top module's own cells and
+        # everything inside a submodule is invisible to fault injection.
+        flat = "flatten; " if cfg.flatten else ""
         script = (
             f"read_verilog{incs}{defs} {sources}; "
             f"hierarchy -check -top {cfg.top}; "
-            "proc; opt; memory; opt; techmap; opt; "
+            f"proc; {flat}opt; memory; opt; techmap; opt; "
             f"abc -g {cfg.abc_gates}; {tail}"
             f"write_json {netlist}"
         )

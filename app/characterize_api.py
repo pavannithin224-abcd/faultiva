@@ -243,6 +243,62 @@ def _user_dir() -> Path:
 
 # ───────────────────────── preflight ─────────────────────────
 
+async def _read_sources(form) -> tuple[list[tuple[str, str]], str | None]:
+    """Every uploaded Verilog file, as (filename, text).
+
+    A design is often a wrapper plus the modules it instantiates, so more than
+    one part may arrive under the same field name.  Returns an error message
+    instead of the list when something is unusable.
+    """
+    uploads = [u for u in form.getlist("rtl") if hasattr(u, "read")]
+    if not uploads:
+        return [], "no Verilog file supplied"
+
+    total = 0
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for upload in uploads:
+        raw = await upload.read()
+        total += len(raw)
+        if total > 8 * 1024 * 1024:
+            return [], "files larger than 8 MB in total"
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            name = Path(getattr(upload, "filename", "design.v")).name
+            return [], f"{name} is not UTF-8 text"
+        name = Path(getattr(upload, "filename", "design.v")).name
+        if name in seen:          # same file picked twice
+            continue
+        seen.add(name)
+        out.append((name, text))
+    return out, None
+
+
+def _infer_top(sources: list[tuple[str, str]]) -> str:
+    """The module nothing else instantiates.
+
+    With several files the top is the one no other module uses, which is a
+    better guess than "last module in the file" once a wrapper is involved.
+    """
+    import re
+    declared: list[str] = []
+    for _, text in sources:
+        declared += re.findall(r"^\s*module\s+([A-Za-z_]\w*)", text, re.M)
+    if not declared:
+        return Path(sources[0][0]).stem if sources else "top"
+
+    instantiated: set[str] = set()
+    for _, text in sources:
+        for mod in declared:
+            # `mod instance_name (` - a declaration is `module mod`
+            if re.search(r"^\s*(?!module\b)" + re.escape(mod) + r"\s+[A-Za-z_]\w*\s*\(",
+                         text, re.M):
+                instantiated.add(mod)
+    roots = [m for m in declared if m not in instantiated]
+    return roots[-1] if roots else declared[-1]
+
+
 async def api_preflight(request: Request) -> JSONResponse:
     """Synthesize an uploaded design and report its size, without simulating."""
     if not _loopback_only(request):
@@ -255,26 +311,20 @@ async def api_preflight(request: Request) -> JSONResponse:
                              "toolchain": chain.as_dict()}, status_code=409)
 
     form = await request.form()
-    upload = form.get("rtl")
-    if upload is None or not hasattr(upload, "read"):
-        return JSONResponse({"error": "no Verilog file supplied"},
-                            status_code=400)
+    sources, problem = await _read_sources(form)
+    if problem:
+        return JSONResponse({"error": problem}, status_code=400)
 
-    raw = await upload.read()
-    if len(raw) > 8 * 1024 * 1024:
-        return JSONResponse({"error": "file larger than 8 MB"}, status_code=400)
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return JSONResponse({"error": "file is not UTF-8 text"},
-                            status_code=400)
-
-    name = Path(getattr(upload, "filename", "design.v")).name
     top = str(form.get("top") or "").strip()
     scratch = Path(tempfile.mkdtemp(prefix="faultiva_pre_"))
     try:
-        rtl = scratch / name
-        rtl.write_text(text, encoding="utf-8")
+        # side by side, so a relative `include` resolves the way it would in
+        # the user's own tree
+        rtl_paths = []
+        for name, text in sources:
+            p = scratch / name
+            p.write_text(text, encoding="utf-8")
+            rtl_paths.append(p)
 
         # Reuse the campaign's own synthesis and enumeration, so the preflight
         # count is the number the real run will use, not an approximation.
@@ -283,9 +333,7 @@ async def api_preflight(request: Request) -> JSONResponse:
         from faultiva.characterize.config import parse_config
 
         if not top:
-            import re
-            found = re.findall(r"^\s*module\s+([A-Za-z_]\w*)", text, re.M)
-            top = found[-1] if found else Path(name).stem
+            top = _infer_top(sources)
 
         # Preflight only needs synthesis, so the stimulus description can be
         # nominal; it is never simulated here.  The names still have to parse,
@@ -293,7 +341,7 @@ async def api_preflight(request: Request) -> JSONResponse:
         cfg = parse_config({
             "circuit": "preflight",
             "top": top,
-            "rtl": [str(rtl)],
+            "rtl": [str(p) for p in rtl_paths],
             "clock": str(form.get("clock") or "clk"),
             "reset": {"name": str(form.get("reset") or "rst_n"),
                       "active_low": str(form.get("reset_active_low")
@@ -409,16 +457,9 @@ async def api_characterize(request: Request) -> JSONResponse:
                              "toolchain": chain.as_dict()}, status_code=409)
 
     form = await request.form()
-    upload = form.get("rtl")
-    if upload is None or not hasattr(upload, "read"):
-        return JSONResponse({"error": "no Verilog file supplied"},
-                            status_code=400)
-    raw = await upload.read()
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return JSONResponse({"error": "file is not UTF-8 text"},
-                            status_code=400)
+    sources, problem = await _read_sources(form)
+    if problem:
+        return JSONResponse({"error": problem}, status_code=400)
 
     circuit = str(form.get("circuit") or "").strip()
     if not circuit or not circuit.replace("_", "").isalnum():
@@ -437,9 +478,11 @@ async def api_characterize(request: Request) -> JSONResponse:
     work = out / circuit / "_src"
     work.mkdir(parents=True, exist_ok=True)
 
-    name = Path(getattr(upload, "filename", "design.v")).name
-    rtl = work / name
-    rtl.write_text(text, encoding="utf-8")
+    rtl_paths = []
+    for name, text in sources:
+        p = work / name
+        p.write_text(text, encoding="utf-8")
+        rtl_paths.append(p)
 
     try:
         in_width = max(1, int(str(form.get("data_in_width") or "32")))
@@ -450,8 +493,8 @@ async def api_characterize(request: Request) -> JSONResponse:
 
     config = {
         "circuit": circuit,
-        "rtl": [str(rtl)],
-        "top": str(form.get("top") or "").strip() or Path(name).stem,
+        "rtl": [str(p) for p in rtl_paths],
+        "top": str(form.get("top") or "").strip() or _infer_top(sources),
         "clock": str(form.get("clock") or "clk"),
         "reset": {"name": str(form.get("reset") or "rst_n"),
                   "active_low": str(form.get("reset_active_low")

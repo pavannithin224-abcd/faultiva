@@ -770,8 +770,8 @@ a3f1c92b…9c22                                                   0        0    
           </span>
           <button type="button" class="dx" id="clr-rtl" hidden
                   title="Remove">&#10005;</button>
-          <label class="dbtn" for="cz-rtl">Choose file</label>
-          <input id="cz-rtl" type="file" accept=".v,.sv,.vh,.svh" hidden>
+          <label class="dbtn" for="cz-rtl">Choose files</label>
+          <input id="cz-rtl" type="file" accept=".v,.sv,.vh,.svh" multiple hidden>
         </div>
 
         <div class="grid3">
@@ -1133,23 +1133,35 @@ function render(d) {
       if (clear) clear.hidden = true;
     }
 
-    function loaded(file){
+    function loaded(files){
+      var list = Array.prototype.slice.call(files);
+      var total = list.reduce(function(n, f){ return n + f.size; }, 0);
       zone.classList.add("has");
       name.classList.add("has");
       if (icon) icon.innerHTML = TICK;
-      if (head) head.textContent = file.name;
+      if (head) head.textContent = list.length === 1 ? list[0].name
+                                 : list.length + " files";
       if (clear) clear.hidden = false;
-      name.textContent = human(file.size) + " \u00b7 reading\u2026";
-      var reader = new FileReader();
-      reader.onload = function(){
-        name.textContent = cfg.describe(String(reader.result), file);
-      };
-      reader.onerror = function(){ name.textContent = human(file.size); };
-      reader.readAsText(file);
+      name.textContent = human(total) + " \u00b7 reading\u2026";
+
+      // read every part, then describe the set as a whole
+      var texts = new Array(list.length), done = 0, failed = false;
+      list.forEach(function(file, i){
+        var reader = new FileReader();
+        reader.onload = function(){
+          texts[i] = String(reader.result);
+          if (++done === list.length && !failed)
+            name.textContent = cfg.describe(texts.join("\n"), list, texts);
+        };
+        reader.onerror = function(){
+          failed = true; name.textContent = human(total);
+        };
+        reader.readAsText(file);
+      });
     }
 
     function sync(){
-      if (input.files && input.files.length) loaded(input.files[0]);
+      if (input.files && input.files.length) loaded(input.files);
       else reset();
     }
 
@@ -1180,7 +1192,12 @@ function render(d) {
       if (!e.dataTransfer || !e.dataTransfer.files.length) return;
       try {
         var dt = new DataTransfer();
-        dt.items.add(e.dataTransfer.files[0]);
+        // keep every dropped file when the input allows a set
+        if (input.multiple)
+          Array.prototype.forEach.call(e.dataTransfer.files, function(f){
+            dt.items.add(f);
+          });
+        else dt.items.add(e.dataTransfer.files[0]);
         input.files = dt.files;
       } catch (err) { return; }
       input.dispatchEvent(new Event("change"));
@@ -1200,32 +1217,49 @@ function render(d) {
     zone:"cap-drop", input:"capture", name:"upname", icon:"cap-ic",
     head:"cap-head", clear:"clr-cap",
     idle:"drop it here, or choose a file",
-    describe:function(text, file){
+    describe:function(text, files){
       var lines = text.split(/\r?\n/).filter(function(l){
         l = l.trim(); return l && l.charAt(0) !== "#";
       });
+      var size = files.reduce(function(n, f){ return n + f.size; }, 0);
       return lines.length + " vector" + (lines.length === 1 ? "" : "s")
-           + " \u00b7 " + human(file.size);
+           + " \u00b7 " + human(size);
     }
   });
 
   wire({
     zone:"rtl-drop", input:"cz-rtl", name:"cz-name", icon:"rtl-ic",
     head:"rtl-head", clear:"clr-rtl",
-    idle:"drop it here, or choose a file",
-    describe:function(text, file){
-      var mods = text.match(/^\s*module\s+([A-Za-z_]\w*)/gm) || [];
-      // fill the top module and circuit name from the last module declared
-      if (mods.length){
-        var last = mods[mods.length-1].replace(/^\s*module\s+/, "");
+    idle:"drop your Verilog here \u2014 include every module the design uses",
+    describe:function(text, files, texts){
+      var names = (text.match(/^\s*module\s+([A-Za-z_]\w*)/gm) || [])
+        .map(function(m){ return m.replace(/^\s*module\s+/, ""); });
+
+      // The top module is the one nothing else instantiates.  With a wrapper
+      // and its core that is the wrapper; with a single file it is the last
+      // module, as before.
+      var used = {};
+      names.forEach(function(mod){
+        var re = new RegExp("^\\s*(?!module\\b)" + mod + "\\s+[A-Za-z_]\\w*\\s*\\(", "m");
+        if (re.test(text)) used[mod] = true;
+      });
+      var roots = names.filter(function(m){ return !used[m]; });
+      var pick = roots.length ? roots[roots.length-1]
+                              : names[names.length-1];
+      if (pick){
         var top = document.getElementById("cz-top");
         var cid = document.getElementById("cz-name-id");
-        if (top && !top.value) top.value = last;
-        if (cid && !cid.value) cid.value = last;
+        if (top && !top.value) top.value = pick;
+        if (cid && !cid.value) cid.value = pick;
       }
-      return text.split(/\r?\n/).length + " lines \u00b7 "
-           + mods.length + " module" + (mods.length === 1 ? "" : "s")
-           + " \u00b7 " + human(file.size);
+
+      var size = files.reduce(function(n, f){ return n + f.size; }, 0);
+      var lines = text.split(/\r?\n/).length;
+      var filePart = files.length === 1 ? ""
+        : files.length + " files \u00b7 ";
+      return filePart + lines + " lines \u00b7 "
+           + names.length + " module" + (names.length === 1 ? "" : "s")
+           + " \u00b7 " + human(size);
     }
   });
 })();
@@ -1335,7 +1369,10 @@ function render(d) {
 
   function fields(){
     var fd = new FormData();
-    if (rtl && rtl.files && rtl.files.length) fd.append("rtl", rtl.files[0]);
+    if (rtl && rtl.files)
+      Array.prototype.forEach.call(rtl.files, function(f){
+        fd.append("rtl", f);           // one part per file, same field name
+      });
     [["top","cz-top"],["clock","cz-clock"],["reset","cz-reset"],
      ["start","cz-start"],["done","cz-done"],["data_in","cz-din"],
      ["data_out","cz-dout"],["data_in_width","cz-dinw"],
