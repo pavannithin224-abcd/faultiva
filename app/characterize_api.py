@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -125,43 +126,64 @@ class Job:
 _JOB: Job | None = None
 _JOB_LOCK = threading.Lock()
 
-_PHASES = {
-    "synthesiz": (1, "Synthesize netlist"),
-    "enumerat": (2, "Enumerate fault sites"),
-    "instrument": (3, "Instrument fault injection"),
-    "build": (4, "Build simulator"),
-    "simulat": (5, "Simulate faults"),
-    "catalogue": (6, "Build signature catalogue"),
-    "round trip": (7, "Verify round trip"),
-    "verify": (7, "Verify round trip"),
+# The campaign prints its own phase number as "[n/7] <text>", so take the
+# number from there rather than inferring it from keywords - an inferred map
+# drifts from the campaign the moment its order changes, and a progress panel
+# that names the wrong activity is worse than one that names none.
+PHASE_NAMES = {
+    1: "Synthesize netlist",
+    2: "Enumerate fault sites",
+    3: "Instrument fault injection",
+    4: "Build simulator",
+    5: "Capture fault-free baseline",
+    6: "Simulate faults",
+    7: "Write catalogue",
 }
 
 
 def _parse_progress(job: Job, line: str) -> None:
-    """Update job state from one line of campaign output."""
-    low = line.lower()
-    for needle, (num, name) in _PHASES.items():
-        if needle in low:
-            if num >= job.phase:
-                job.phase, job.phase_name = num, name
-            break
+    """Update job state from one line of campaign output.
 
-    # "[5/7] batch 58/92" and "5,848 sites" style lines
-    import re
-    m = re.search(r"batch\s+(\d+)\s*/\s*(\d+)", low)
+    Every pattern here is taken from the campaign's actual output, not from an
+    assumption about it:
+
+        [1/7] synthesizing siphash_core with yosys
+              3,997 sites, 7,994 faults, 63 batches
+        [6/7] campaign: 63 batches, 0 already done, 63 to run, 10 workers
+              20/63 batches
+    """
+    low = line.lower()
+
+    # phase number straight from the campaign's own label
+    m = re.match(r"\s*\[(\d+)\s*/\s*7\]", low)
+    if m:
+        num = int(m.group(1))
+        if num >= job.phase:
+            job.phase = num
+            job.phase_name = PHASE_NAMES.get(num, line.strip()[:48])
+
+    # "   20/63 batches" - the count comes BEFORE the word
+    m = re.search(r"(\d+)\s*/\s*(\d+)\s+batches", low)
     if m:
         job.batches_done = int(m.group(1))
         job.batches_total = int(m.group(2))
+    else:
+        # "[6/7] campaign: 63 batches, ..." establishes the total up front, so
+        # the bar has a denominator before the first completion report
+        m = re.search(r"campaign:\s*([\d,]+)\s+batches", low)
+        if m and not job.batches_total:
+            job.batches_total = int(m.group(1).replace(",", ""))
+
     m = re.search(r"([\d,]+)\s+sites", low)
     if m and not job.sites:
         job.sites = int(m.group(1).replace(",", ""))
     m = re.search(r"([\d,]+)\s+faults", low)
     if m and not job.faults_total:
         job.faults_total = int(m.group(1).replace(",", ""))
-    if "fail" in low and "0 fail" not in low:
-        m = re.search(r"(\d+)\s+failures?", low)
-        if m:
-            job.failures = int(m.group(1))
+
+    m = re.search(r"(\d+)\s+failures?", low)
+    if m:
+        job.failures = int(m.group(1))
 
 
 def _runner(job: Job, config: Path, out: Path, workers: int) -> None:
@@ -336,6 +358,38 @@ def _human(seconds: float) -> str:
 
 # ───────────────────────── campaign ─────────────────────────
 
+def _normalise_constants(raw) -> list[dict]:
+    """Convert a convenient constants shape into the schema's own.
+
+    The parser requires a list of {name, width, value}; a form naturally
+    produces {"mode": 1}.  Accept either, and accept "name": [width, value]
+    when the pin is wider than its value needs.
+    """
+    if isinstance(raw, list):
+        return raw                      # already in schema form
+    if not isinstance(raw, dict):
+        raise ValueError("expected a mapping or a list")
+
+    out = []
+    for name, value in raw.items():
+        if isinstance(value, (list, tuple)):
+            if len(value) != 2:
+                raise ValueError(f"{name}: expected [width, value]")
+            width, held = int(value[0]), int(value[1])
+        elif isinstance(value, dict):
+            out.append(value)
+            continue
+        else:
+            held = 1 if value is True else 0 if value is False else int(value)
+            width = max(1, held.bit_length())
+        if held < 0:
+            raise ValueError(f"{name}: must be >= 0")
+        if held >= (1 << width):
+            raise ValueError(f"{name}: {held} does not fit in {width} bit(s)")
+        out.append({"name": name, "width": width, "value": held})
+    return out
+
+
 async def api_characterize(request: Request) -> JSONResponse:
     """Start a characterization campaign."""
     global _JOB
@@ -421,9 +475,14 @@ async def api_characterize(request: Request) -> JSONResponse:
     constants = str(form.get("constants") or "").strip()
     if constants:
         try:
-            config["constants"] = json.loads(constants)
+            parsed = json.loads(constants)
         except json.JSONDecodeError:
             return JSONResponse({"error": "constants must be JSON"},
+                                status_code=400)
+        try:
+            config["constants"] = _normalise_constants(parsed)
+        except ValueError as exc:
+            return JSONResponse({"error": f"constants: {exc}"},
                                 status_code=400)
 
     import yaml
@@ -485,8 +544,9 @@ async def api_config_template(request: Request) -> JSONResponse:
         "vectors: 64                  # test patterns, derived deterministically\n"
         "cycle_budget: 200            # generous upper bound per operation\n"
         "\n"
-        "# optional: configuration pins held at a fixed value\n"
+        "# optional: configuration pins held at a fixed value for the whole\n"
+        "# campaign - width is required, because the pin has to be driven\n"
         "# constants:\n"
-        "#   mode: 1\n"
+        "#   - {name: mode, width: 1, value: 1}\n"
     )
     return JSONResponse({"filename": "my_core.yaml", "text": template})

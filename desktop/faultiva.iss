@@ -10,7 +10,7 @@
 
 #define AppName       "Faultiva"
 #define AppVersion    "1.0.0"
-#define AppPublisher  "Pavan Nithin"
+#define AppPublisher  "PAVAN D"
 #define AppURL        "https://github.com/pavannithin224-abcd/faultiva"
 #define AppExe        "Faultiva.exe"
 ; set FAULTIVA_DIST / FAULTIVA_OUT before compiling, or edit these
