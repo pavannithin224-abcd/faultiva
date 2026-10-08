@@ -297,6 +297,111 @@
   footer.site .wrap{display:flex;gap:28px;flex-wrap:wrap;align-items:baseline}
   footer.site .sp{margin-left:auto}
   @media(max-width:720px){footer.site .sp{margin-left:0}}
+
+  /* ─────────────── app layout: sidebar + content ─────────────── */
+  .app{display:flex;min-height:100vh;position:relative;z-index:1}
+  .side{width:208px;flex-shrink:0;background:var(--panel);
+        border-right:1px solid var(--line);display:flex;flex-direction:column;
+        position:sticky;top:0;height:100vh;z-index:5}
+  .side-top{padding:16px 15px 4px}
+  .side .brand{display:flex;align-items:center;gap:9px;text-decoration:none}
+  .side .wordmark{font-size:17px}
+  .side .ver{margin-left:0}
+  .snav{margin-top:16px;display:flex;flex-direction:column}
+  .snav .tab{all:unset;display:block;box-sizing:border-box;width:100%;
+             font:500 13.5px/1.45 var(--sans);color:var(--mut);
+             padding:9px 15px;cursor:pointer;border-left:2px solid transparent}
+  .snav .tab:hover{color:var(--ink);background:var(--sunk)}
+  .snav .tab[aria-current="page"]{background:var(--acc-soft);color:var(--ink);
+    border-left-color:var(--acc);font-weight:650}
+  .side-sect{font-size:9.5px;letter-spacing:.09em;color:var(--faint);
+             font-weight:700;padding:0 15px;margin:22px 0 6px}
+  .tool{padding:3px 15px;font:11px/1.5 var(--mono);color:var(--mut);
+        display:flex;align-items:center;gap:6px}
+  .tool .tdot{width:7px;height:7px;border-radius:50%;background:var(--faint);
+              flex-shrink:0}
+  .tool.yes .tdot{background:var(--ok)}
+  .tool.yes{color:var(--ok)}
+  .tool.no .tdot{background:var(--bad)}
+  .tool.no{color:var(--bad)}
+  .tool.old .tdot{background:var(--warn)}
+  .tool.old{color:var(--warn)}
+  .side-foot{margin-top:auto;padding:14px 15px}
+  .side-foot .cta{display:block;text-align:center;margin-bottom:11px}
+  .content{flex:1;min-width:0;display:flex;flex-direction:column}
+
+  /* ── theme switch: a stuck-at waveform ── */
+  .sw{all:unset;display:block;cursor:pointer;width:100%}
+  .sw-lab{display:flex;justify-content:space-between;align-items:baseline;
+          font-size:9px;letter-spacing:.09em;font-weight:700;
+          color:var(--faint);margin-bottom:5px}
+  .sw-lab b{font-family:var(--mono);color:var(--acc)}
+  .sw-box{border:1px solid var(--line);border-radius:6px;background:var(--paper);
+          padding:6px 8px;transition:border-color .15s ease}
+  .sw:hover .sw-box{border-color:var(--acc)}
+  .sw-box svg{display:block;width:100%;height:26px;overflow:visible}
+  .sg{fill:none;stroke:var(--acc);stroke-width:2;stroke-linecap:square;
+      stroke-linejoin:miter;transition:d .2s ease}
+  .sg-dim{fill:none;stroke:var(--line);stroke-width:2;stroke-dasharray:3 3}
+  .rail{font-size:8px;fill:var(--faint);font-family:var(--mono)}
+  .knob{fill:var(--acc);transition:cy .2s ease}
+  .knob-ring{fill:none;stroke:var(--acc);stroke-width:1.4;opacity:.3;
+             transition:cy .2s ease}
+
+  /* ─────────────── characterize page ─────────────── */
+  .cz-note{border-radius:8px;padding:14px 16px;margin-bottom:16px;
+           font-size:13px;line-height:1.65}
+  .cz-note.warn{background:var(--warn-soft);border:1px solid var(--warn)}
+  .cz-note.good{background:var(--ok-soft);border:1px solid var(--ok)}
+  .cz-note.bad{background:var(--bad-soft);border:1px solid var(--bad)}
+  .cz-note b{color:var(--ink)}
+  .cz-note .t{font-weight:700;color:var(--ink);display:block;margin-bottom:5px}
+  .cmd{display:flex;align-items:center;gap:10px;margin-top:11px;
+       background:var(--paper);border:1px solid var(--line);border-radius:6px;
+       padding:9px 11px;font:12px/1.4 var(--mono);color:var(--ink)}
+  .cmd code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;
+            background:none;border:none;padding:0;font-size:12px}
+  .cmd button{all:unset;cursor:pointer;flex-shrink:0;font:700 9.5px var(--sans);
+              letter-spacing:.06em;color:var(--acc);padding:3px 7px;
+              border:1px solid var(--acc);border-radius:4px}
+  .cmd button:hover{background:var(--acc);color:#fff}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;
+         margin-bottom:14px}
+  .fld label{display:block;font-size:9.5px;letter-spacing:.07em;font-weight:700;
+             color:var(--faint);margin-bottom:4px}
+  .fld input{width:100%;box-sizing:border-box;background:var(--paper);
+             border:1px solid var(--line);border-radius:6px;padding:8px 10px;
+             font:13px var(--sans);color:var(--ink)}
+  .fld input:focus{outline:none;border-color:var(--acc)}
+  .pf-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+           margin:12px 0 4px}
+  .pf-grid .v{font:700 19px/1.1 var(--sans);color:var(--ink)}
+  .pf-grid .l{font-size:10.5px;color:var(--mut);margin-top:3px}
+  .ph{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:13px}
+  .ph .pi{width:15px;text-align:center;font-size:11px;flex-shrink:0}
+  .ph .pt{color:var(--mut)}
+  .ph.on .pt{color:var(--ink);font-weight:650}
+  .ph.done .pi{color:var(--ok)}
+  .ph.on .pi{color:var(--acc)}
+  .ph .pm{margin-left:auto;font:11px var(--mono);color:var(--faint)}
+  .bar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;
+       margin:9px 0 5px}
+  .bar .fill{height:100%;background:var(--acc);transition:width .4s ease}
+  .runlog{font:10.5px/1.75 var(--mono);color:var(--mut);background:var(--sunk);
+          border:1px solid var(--line);border-radius:6px;padding:9px 11px;
+          margin-top:12px;max-height:132px;overflow-y:auto;white-space:pre-wrap}
+  @media (max-width:820px){
+    .app{flex-direction:column}
+    .side{width:auto;height:auto;position:static;border-right:none;
+          border-bottom:1px solid var(--line)}
+    .snav{flex-direction:row;overflow-x:auto;margin-top:10px}
+    .snav .tab{border-left:none;border-bottom:2px solid transparent;
+               white-space:nowrap}
+    .snav .tab[aria-current="page"]{border-left-color:transparent;
+      border-bottom-color:var(--acc)}
+    .side-sect,.tool,.side-foot{display:none}
+    .grid3,.pf-grid{grid-template-columns:1fr 1fr}
+  }
 </style>
 </head>
 <body>
@@ -336,36 +441,57 @@
   </svg>
   <div class="veil"></div>
 </div>
-<div class="shell">
+<div class="app">
 
-<header class="nav">
-  <div class="wrap">
+<!-- ═══════════ sidebar ═══════════ -->
+<aside class="side">
+  <div class="side-top">
     <a class="brand" href="#overview" aria-label="Faultiva home">
-      <svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true">
+      <svg width="28" height="19" viewBox="0 0 30 20" aria-hidden="true">
         <path class="wave" d="M1 14 L5 14 L5 6 L9 6 L9 14 L13 14 L13 6 L16 6"/>
         <path class="wave-stuck" d="M16 6 L29 6" stroke-dasharray="2.5 2.2"/>
         <circle class="stuckdot" cx="16" cy="6" r="2.3"/>
       </svg>
       <span class="wordmark">FAULT<span class="lo">IVA</span><span class="ver">v1.0</span></span>
     </a>
-
-    <div class="tabs" role="tablist">
-      <button class="tab" data-view="overview">Overview</button>
-      <button class="tab" data-view="how">How it works</button>
-      <button class="tab" data-view="analyse">Analyse</button>
-      <button class="tab" data-view="limits">Limits</button>
-    </div>
-
-    <div class="navright">
-      <button class="iconbtn" id="theme" title="Toggle theme" aria-label="Toggle theme">
-        <svg id="themeicon" width="15" height="15" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round"></svg>
-      </button>
-      <a class="cta" href="https://github.com/pavannithin224-abcd/faultiva"
-         target="_blank" rel="noopener">Download</a>
-    </div>
   </div>
-</header>
+
+  <nav class="snav" role="tablist">
+    <button class="tab" data-view="overview">Overview</button>
+    <button class="tab" data-view="analyse">Analyse</button>
+    <button class="tab" data-view="characterize">Add your circuit</button>
+    <button class="tab" data-view="how">How it works</button>
+    <button class="tab" data-view="limits">Limits</button>
+  </nav>
+
+  <div class="side-sect">TOOLCHAIN</div>
+  <div id="toolpanel">
+    <div class="tool"><span class="tdot"></span>checking…</div>
+  </div>
+
+  <div class="side-foot">
+    <a class="cta" href="https://github.com/pavannithin224-abcd/faultiva"
+       target="_blank" rel="noopener">Download</a>
+    <button class="sw" id="theme" title="Switch theme"
+            aria-label="Switch theme">
+      <span class="sw-lab"><span>APPEARANCE</span><b id="swmode">SA1 · HIGH</b></span>
+      <span class="sw-box">
+        <svg viewBox="0 0 150 26" aria-hidden="true">
+          <text class="rail" x="0" y="7">1</text>
+          <text class="rail" x="0" y="25">0</text>
+          <path class="sg-dim" id="swdim" d="M12 22 H138"/>
+          <path class="sg" id="swsig" d="M12 22 H36 L48 4 H138"/>
+          <circle class="knob-ring" id="swring" cx="120" cy="4" r="7"/>
+          <circle class="knob" id="swknob" cx="120" cy="4" r="4"/>
+        </svg>
+      </span>
+    </button>
+  </div>
+</aside>
+
+<div class="content">
+
+
 
 <!-- ───────── OVERVIEW ───────── -->
 <section class="view" id="view-overview">
@@ -554,6 +680,72 @@ a3f1c92b…9c22                                                   0        0    
         Substitute RTL was refused, because characterizing a stub would have measured the
         stub.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── ADD YOUR CIRCUIT ───────── -->
+<section class="view" id="view-characterize">
+  <div class="wrap pad">
+    <div class="sechd">
+      <h2>Add your own circuit</h2>
+      <p>Faultiva diagnoses a circuit by looking its behaviour up in a catalogue.
+      Building that catalogue for your own design is a one-time offline step;
+      afterwards diagnosis is a sub-millisecond lookup like the bundled four.</p>
+    </div>
+
+    <div id="cz-gate"></div>
+
+    <div id="cz-body" hidden>
+      <form id="cz-form">
+        <div class="upload">
+          <div class="up-ic" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 19 19" fill="none"
+                 stroke="currentColor" stroke-width="1.9" stroke-linecap="square">
+              <path d="M9.5 14 V4 M5.5 8 L9.5 4 L13.5 8"/><path d="M3 15.5 H16"/>
+            </svg>
+          </div>
+          <div class="up-t">
+            <b>Your Verilog design</b>
+            <span id="cz-name">No file selected</span>
+          </div>
+          <label class="btn ghost" for="cz-rtl">Choose file</label>
+          <input id="cz-rtl" type="file" accept=".v,.sv,.vh,.svh" hidden>
+        </div>
+
+        <div class="grid3">
+          <div class="fld"><label for="cz-top">TOP MODULE</label>
+            <input id="cz-top" placeholder="detected from the file"></div>
+          <div class="fld"><label for="cz-clock">CLOCK</label>
+            <input id="cz-clock" value="clk"></div>
+          <div class="fld"><label for="cz-reset">RESET (active low)</label>
+            <input id="cz-reset" value="rst_n"></div>
+          <div class="fld"><label for="cz-start">START</label>
+            <input id="cz-start" value="start"></div>
+          <div class="fld"><label for="cz-done">DONE</label>
+            <input id="cz-done" value="done"></div>
+          <div class="fld"><label for="cz-vectors">TEST VECTORS</label>
+            <input id="cz-vectors" value="64"></div>
+          <div class="fld"><label for="cz-din">DATA IN</label>
+            <input id="cz-din" value="data_i"></div>
+          <div class="fld"><label for="cz-dinw">DATA IN WIDTH</label>
+            <input id="cz-dinw" value="32"></div>
+          <div class="fld"><label for="cz-dout">DATA OUT</label>
+            <input id="cz-dout" value="result_o"></div>
+          <div class="fld"><label for="cz-doutw">DATA OUT WIDTH</label>
+            <input id="cz-doutw" value="32"></div>
+          <div class="fld"><label for="cz-name-id">CIRCUIT NAME</label>
+            <input id="cz-name-id" placeholder="my_core"></div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="cz-check" type="button">Check my circuit</button>
+          <button class="btn ghost" id="cz-run" type="button" disabled>Start characterization</button>
+          <button class="btn ghost" id="cz-tpl" type="button">Download config template</button>
+        </div>
+      </form>
+
+      <div id="cz-out" style="margin-top:16px"></div>
     </div>
   </div>
 </section>
@@ -787,7 +979,7 @@ function render(d) {
 <script>
 /* ── view routing: each section is its own page ── */
 (function(){
-  var VIEWS = ["overview","how","analyse","limits"];
+  var VIEWS = ["overview","how","analyse","limits","characterize"];
   function show(name, push){
     if (VIEWS.indexOf(name) === -1) name = "overview";
     VIEWS.forEach(function(v){
@@ -817,14 +1009,29 @@ function render(d) {
   show(location.hash.replace("#","") || "overview", false);
 })();
 
-/* ── theme ── */
+/* ── theme: the switch is a stuck-at waveform.
+      dark  = signal driven LOW  (SA0)
+      light = signal pulled HIGH (SA1)                                  ── */
 (function(){
-  var SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
-  var MOON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
-  var root = document.documentElement, icon = document.getElementById("themeicon");
+  var LOW  = {sig:"M12 4 H36 L48 22 H138", dim:"M12 4 H138", cy:22,
+              label:"SA0 \u00b7 LOW"};
+  var HIGH = {sig:"M12 22 H36 L48 4 H138", dim:"M12 22 H138", cy:4,
+              label:"SA1 \u00b7 HIGH"};
+  var root = document.documentElement;
+  var sig  = document.getElementById("swsig");
+  var dim  = document.getElementById("swdim");
+  var knob = document.getElementById("swknob");
+  var ring = document.getElementById("swring");
+  var mode = document.getElementById("swmode");
+
   function apply(t){
     root.setAttribute("data-theme", t);
-    icon.innerHTML = (t === "dark") ? SUN : MOON;
+    var s = (t === "dark") ? LOW : HIGH;
+    if (sig)  sig.setAttribute("d", s.sig);
+    if (dim)  dim.setAttribute("d", s.dim);
+    if (knob) knob.setAttribute("cy", s.cy);
+    if (ring) ring.setAttribute("cy", s.cy);
+    if (mode) mode.textContent = s.label;
     try { localStorage.setItem("faultiva-theme", t); } catch(e){}
   }
   var saved = null;
@@ -854,8 +1061,316 @@ function render(d) {
     if(clr) clr.addEventListener('click', function(){ setTimeout(sync, 0); });
     sync();
   })();
+
+/* ── toolchain status + the characterize page ─────────────────────── */
+(function(){
+  var TC = null, POLL = null;
+  var panel = document.getElementById("toolpanel");
+  var gate  = document.getElementById("cz-gate");
+  var body  = document.getElementById("cz-body");
+  var out   = document.getElementById("cz-out");
+  var esc2  = function(s){ return String(s).replace(/[&<>"]/g, function(ch){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]; }); };
+
+  function toolRow(t){
+    var cls = t.found ? (t.outdated ? "old" : "yes") : "no";
+    var txt = t.found
+      ? (t.outdated ? t.name + " " + t.version + " \u2014 too old"
+                    : t.name + " " + t.version)
+      : t.name + " \u2014 not found";
+    return '<div class="tool ' + cls + '"><span class="tdot"></span>'
+         + esc2(txt) + '</div>';
+  }
+
+  function paint(d){
+    TC = d;
+    if (panel) panel.innerHTML = toolRow(d.yosys) + toolRow(d.verilator);
+    if (!gate) return;
+
+    if (d.ready && d.local_session){
+      gate.innerHTML = "";
+      if (body) body.hidden = false;
+      return;
+    }
+    if (body) body.hidden = true;
+
+    if (!d.local_session){
+      gate.innerHTML = '<div class="cz-note bad"><span class="t">'
+        + 'Available only on a local session</span>'
+        + 'Characterization compiles and runs code generated from the uploaded '
+        + 'design, so it is refused over the network. Use the desktop app, or '
+        + 'start the server on 127.0.0.1.</div>';
+      return;
+    }
+
+    var h = d.install_hint || {};
+    var title = h.outdated ? "Update Yosys and Verilator to continue"
+                           : "Install Yosys and Verilator to continue";
+    gate.innerHTML = '<div class="cz-note warn"><span class="t">' + title
+      + '</span>'
+      + esc2(h.note || "Characterization synthesizes your Verilog and compiles "
+             + "a simulator, so both tools must be present. They are free and "
+             + "open source.")
+      + '<div class="cmd"><code id="cz-cmd">'
+      + esc2(h.command || "sudo apt install yosys verilator")
+      + '</code><button type="button" id="cz-copy">COPY</button></div>'
+      + '<p style="margin:10px 0 0;font-size:12.5px;color:var(--mut)">'
+      + '<b>Linux is required for this step.</b> On Windows, run it inside WSL. '
+      + 'Diagnosis works everywhere.</p>'
+      + '<div class="actions" style="margin-top:12px">'
+      + '<button class="btn ghost" type="button" id="cz-recheck">Re-check for tools</button>'
+      + '<button class="btn ghost" type="button" id="cz-tpl2">Download config template</button>'
+      + '</div></div>';
+
+    var cp = document.getElementById("cz-copy");
+    if (cp) cp.addEventListener("click", function(){
+      var cmd = document.getElementById("cz-cmd").textContent;
+      navigator.clipboard.writeText(cmd).then(function(){
+        cp.textContent = "COPIED";
+        setTimeout(function(){ cp.textContent = "COPY"; }, 1600);
+      });
+    });
+    var rc = document.getElementById("cz-recheck");
+    if (rc) rc.addEventListener("click", function(){
+      rc.textContent = "Checking\u2026"; load();
+    });
+    var t2 = document.getElementById("cz-tpl2");
+    if (t2) t2.addEventListener("click", template);
+  }
+
+  function load(){
+    fetch("/api/toolchain").then(function(r){ return r.json(); })
+      .then(paint).catch(function(){
+        if (panel) panel.innerHTML =
+          '<div class="tool no"><span class="tdot"></span>unavailable</div>';
+      });
+  }
+  load();
+
+  function template(){
+    fetch("/api/config-template").then(function(r){ return r.json() })
+      .then(function(d){
+        var blob = new Blob([d.text], {type:"text/yaml"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = d.filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+  }
+  var tpl = document.getElementById("cz-tpl");
+  if (tpl) tpl.addEventListener("click", template);
+
+  /* ── file choice: show the name, and guess the top module ── */
+  var rtl = document.getElementById("cz-rtl");
+  var nm  = document.getElementById("cz-name");
+  if (rtl) rtl.addEventListener("change", function(){
+    if (!rtl.files || !rtl.files.length){
+      nm.textContent = "No file selected"; nm.classList.remove("has"); return;
+    }
+    var f = rtl.files[0];
+    nm.textContent = f.name;
+    nm.classList.add("has");
+    var reader = new FileReader();
+    reader.onload = function(){
+      var text = String(reader.result);
+      nm.textContent = f.name + " \u00b7 " + (text.split("\n").length)
+                     + " lines";
+      var mods = text.match(/^\s*module\s+([A-Za-z_]\w*)/gm);
+      if (mods && mods.length){
+        var last = mods[mods.length-1].replace(/^\s*module\s+/, "");
+        var top = document.getElementById("cz-top");
+        var cid = document.getElementById("cz-name-id");
+        if (top && !top.value) top.value = last;
+        if (cid && !cid.value) cid.value = last;
+      }
+    };
+    reader.readAsText(f);
+  });
+
+  function fields(){
+    var fd = new FormData();
+    if (rtl && rtl.files && rtl.files.length) fd.append("rtl", rtl.files[0]);
+    [["top","cz-top"],["clock","cz-clock"],["reset","cz-reset"],
+     ["start","cz-start"],["done","cz-done"],["data_in","cz-din"],
+     ["data_out","cz-dout"],["data_in_width","cz-dinw"],
+     ["data_out_width","cz-doutw"],["vectors","cz-vectors"],
+     ["circuit","cz-name-id"]].forEach(function(pair){
+       var el = document.getElementById(pair[1]);
+       if (el && el.value) fd.append(pair[0], el.value);
+     });
+    return fd;
+  }
+
+  /* ── preflight ── */
+  var check = document.getElementById("cz-check");
+  var run   = document.getElementById("cz-run");
+  if (check) check.addEventListener("click", function(){
+    if (!rtl || !rtl.files || !rtl.files.length){
+      out.innerHTML = '<div class="cz-note bad">Choose a Verilog file first.</div>';
+      return;
+    }
+    check.disabled = true;
+    check.innerHTML = '<span class="spin"></span>Synthesizing';
+    out.innerHTML = '<div class="empty">Synthesizing your design\u2026</div>';
+    fetch("/api/preflight", {method:"POST", body:fields()})
+      .then(function(r){ return r.json().then(function(d){ return [r.ok, d]; }); })
+      .then(function(pair){
+        var ok = pair[0], d = pair[1];
+        if (!ok || d.error){
+          out.innerHTML = '<div class="cz-note bad"><span class="t">'
+            + 'Could not synthesize this design</span>' + esc2(d.error || "failed")
+            + '</div>';
+          if (run) run.disabled = true;
+          return;
+        }
+        out.innerHTML = '<div class="cz-note good">'
+          + '<span class="t">\u2713 Ready to characterize \u2014 synthesized in '
+          + d.synthesis_s + ' s</span>'
+          + '<div class="pf-grid">'
+          + '<div><div class="v">' + d.sites.toLocaleString() + '</div>'
+          + '<div class="l">fault sites</div></div>'
+          + '<div><div class="v">' + d.faults.toLocaleString() + '</div>'
+          + '<div class="l">single stuck-at faults</div></div>'
+          + '<div><div class="v">' + d.batches + '</div>'
+          + '<div class="l">simulation batches</div></div>'
+          + '<div><div class="v">' + esc2(d.estimate_text) + '</div>'
+          + '<div class="l">estimated, on ' + d.workers + ' workers</div></div>'
+          + '</div>'
+          + '<p style="margin:8px 0 0;font-size:12px;color:var(--mut)">top module '
+          + '<b>' + esc2(d.top) + '</b> \u00b7 ' + d.combinational_sites
+          + ' combinational, ' + d.sequential_sites + ' sequential \u00b7 '
+          + d.distinct_cell_types + ' cell types. The estimate is approximate; '
+          + 'the run is resumable.</p></div>';
+        if (run) run.disabled = false;
+      })
+      .catch(function(e){
+        out.innerHTML = '<div class="cz-note bad">' + esc2(String(e)) + '</div>';
+      })
+      .finally(function(){
+        check.disabled = false; check.textContent = "Check my circuit";
+      });
+  });
+
+  /* ── campaign + progress ── */
+  var PHASES = ["Synthesize netlist","Enumerate fault sites",
+                "Instrument fault injection","Build simulator",
+                "Simulate faults","Build signature catalogue",
+                "Verify round trip"];
+
+  function renderJob(j){
+    var pct = j.batches_total
+      ? Math.round(100 * j.batches_done / j.batches_total) : 0;
+    var h = '<div class="cz-note' + (j.status === "failed" ? " bad"
+            : j.status === "done" ? " good" : "") + '">';
+    h += '<span class="t">' + (
+          j.status === "done"      ? "\u2713 " + esc2(j.circuit) + " is ready"
+        : j.status === "failed"    ? "Characterization failed"
+        : j.status === "cancelled" ? "Cancelled"
+        : "Characterizing " + esc2(j.circuit)) + '</span>';
+
+    if (j.status === "running"){
+      h += '<p style="margin:0 0 10px;font-size:12.5px;color:var(--mut)">'
+         + 'You can leave this page \u2014 the run continues and resumes if '
+         + 'interrupted.</p>';
+    }
+    for (var i = 0; i < PHASES.length; i++){
+      var n = i + 1;
+      var cls = n < j.phase ? "done" : (n === j.phase ? "on" : "");
+      var mark = n < j.phase ? "\u2713" : (n === j.phase ? "\u25b8" : "\u25cb");
+      var extra = "";
+      if (n === 5 && j.batches_total) extra = "batch " + j.batches_done
+                                            + " / " + j.batches_total;
+      else if (n === 2 && j.sites) extra = j.sites.toLocaleString() + " sites";
+      h += '<div class="ph ' + cls + '"><span class="pi">' + mark + '</span>'
+         + '<span class="pt">' + n + ' \u00b7 ' + PHASES[i] + '</span>'
+         + '<span class="pm">' + extra + '</span></div>';
+      if (n === 5 && j.status === "running" && j.batches_total){
+        h += '<div class="bar"><div class="fill" style="width:' + pct + '%"></div></div>'
+           + '<div style="display:flex;justify-content:space-between;'
+           + 'font:11px var(--mono);color:var(--mut)"><span>'
+           + j.failures + ' failures</span><span>'
+           + (j.remaining_s != null
+              ? "~" + Math.ceil(j.remaining_s / 60) + " min remaining" : "")
+           + '</span></div>';
+      }
+    }
+    if (j.error) h += '<div class="cmd"><code>' + esc2(j.error) + '</code></div>';
+    if (j.log && j.log.length){
+      h += '<div class="runlog">' + esc2(j.log.join("\n")) + '</div>';
+    }
+    if (j.status === "running"){
+      h += '<div class="actions" style="margin-top:12px">'
+         + '<button class="btn ghost" type="button" id="cz-cancel">Cancel</button>'
+         + '</div>';
+    } else if (j.status === "done"){
+      h += '<p style="margin:10px 0 0;font-size:12.5px">Open <b>Analyse</b> and '
+         + 'pick <b>' + esc2(j.circuit) + '</b> \u2014 it now sits beside the '
+         + 'bundled circuits.</p>';
+    }
+    out.innerHTML = h + '</div>';
+
+    var cx = document.getElementById("cz-cancel");
+    if (cx) cx.addEventListener("click", function(){
+      cx.disabled = true;
+      fetch("/api/characterize/cancel", {method:"POST"});
+    });
+  }
+
+  function poll(){
+    fetch("/api/characterize/status").then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.job) return;
+        renderJob(d.job);
+        if (d.job.status !== "running"){
+          clearInterval(POLL); POLL = null;
+          if (run) run.disabled = false;
+          if (d.job.status === "done") refreshCircuits();
+        }
+      });
+  }
+
+  if (run) run.addEventListener("click", function(){
+    var cid = document.getElementById("cz-name-id");
+    if (!cid || !cid.value){
+      out.innerHTML = '<div class="cz-note bad">Give the circuit a name.</div>';
+      return;
+    }
+    run.disabled = true;
+    fetch("/api/characterize", {method:"POST", body:fields()})
+      .then(function(r){ return r.json().then(function(d){ return [r.ok, d]; }); })
+      .then(function(pair){
+        if (!pair[0]){
+          out.innerHTML = '<div class="cz-note bad">'
+            + esc2(pair[1].error || "could not start") + '</div>';
+          run.disabled = false;
+          return;
+        }
+        renderJob(pair[1].job);
+        if (!POLL) POLL = setInterval(poll, 2000);
+      });
+  });
+
+  // a finished circuit must appear in the analyser without a reload
+  function refreshCircuits(){
+    fetch("/api/circuits").then(function(r){ return r.json(); }).then(function(d){
+      window.CIRCUITS = d.circuits;
+      var sel = document.getElementById("circuit");
+      if (!sel) return;
+      var keep = sel.value;
+      sel.innerHTML = d.circuits.map(function(c){
+        return '<option value="' + c.id + '">' + c.id + '</option>'; }).join("");
+      if (keep) sel.value = keep;
+      sel.dispatchEvent(new Event("change"));
+    });
+  }
+
+  // pick up a run already in progress when the page loads
+  poll();
+})();
 </script>
 
+</div>
 </div>
 </body>
 </html>

@@ -209,14 +209,14 @@ def _repo_root() -> Path:
 def _user_dir() -> Path:
     """Where characterized circuits are written.
 
-    Never inside the installation: a frozen app lives in Program Files or a
-    read-only bundle directory, and the catalogue belongs to the user.
+    Never inside the installation: a frozen app may live in a read-only
+    directory, and a catalogue the user built is their data.  Takes the first
+    entry of the engine's own resolution order so the writer and the reader can
+    never disagree about the location - they did once, and a finished campaign
+    was invisible.
     """
-    stated = os.environ.get("FAULTIVA_USER_CIRCUITS")
-    if stated:
-        return Path(stated)
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return Path(base) / "Faultiva" / "user_circuits"
+    from faultiva import Faultiva
+    return Faultiva.user_circuit_roots()[0]
 
 
 # ───────────────────────── preflight ─────────────────────────

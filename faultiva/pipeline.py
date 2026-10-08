@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 
 import numpy as np
@@ -60,6 +61,35 @@ class FaultivaResult:
 class Faultiva:
     """The shipped hybrid fault detection and localization pipeline."""
 
+    @staticmethod
+    def user_circuit_roots(explicit=None) -> list[Path]:
+        """Directories that may hold user-characterized circuits.
+
+        The writer cannot use the package directory - a frozen install may be
+        read-only, and a catalogue the user built is their data, not part of
+        the installation.  So the per-user location is authoritative and the
+        package directory is kept for source checkouts.  Both are scanned, in
+        priority order, so nothing built earlier becomes invisible.
+        """
+        roots: list[Path] = []
+        if explicit is not None:
+            roots.append(Path(explicit))
+        stated = os.environ.get("FAULTIVA_USER_CIRCUITS")
+        if stated:
+            roots.append(Path(stated))
+        base = (os.environ.get("LOCALAPPDATA")
+                or os.environ.get("XDG_DATA_HOME")
+                or os.path.expanduser("~"))
+        roots.append(Path(base) / "Faultiva" / "user_circuits")
+        roots.append(Path(__file__).resolve().parents[1] / "user_circuits")
+        out, known = [], set()
+        for r in roots:
+            key = str(r)
+            if key not in known:
+                known.add(key)
+                out.append(r)
+        return out
+
     def __init__(self, package_root: Path | None = None,
                  user_circuits: Path | str | None = None) -> None:
         self.root = Path(package_root) if package_root else PKG
@@ -86,12 +116,14 @@ class Faultiva:
         self._user_golden: dict[str, np.ndarray] = {}
         self._user_cycles: dict[str, np.ndarray] = {}
         self._user_sites: dict[str, dict] = {}
-        user_root = Path(user_circuits) if user_circuits is not None \
-            else self.root / "user_circuits"
-        if user_root.is_dir():
+        seen: set[str] = set()
+        for user_root in self.user_circuit_roots(user_circuits):
+            if not user_root.is_dir():
+                continue
             for entry in sorted(user_root.iterdir()):
-                if not entry.is_dir():
+                if not entry.is_dir() or entry.name in seen:
                     continue
+                seen.add(entry.name)
                 try:
                     self._load_user_circuit(entry)
                 except Exception as exc:                        # noqa: BLE001
