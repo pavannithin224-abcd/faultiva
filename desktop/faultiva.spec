@@ -12,8 +12,8 @@ cleanly and then fails at the first request.
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
-# payload root: the repo this spec lives in, or FAULTIVA_STAGE when the
-# build runs from a staging copy
+# payload root: the directory this spec lives beside, or FAULTIVA_STAGE
+# when the build runs from a staging copy
 import os
 STAGE = Path(os.environ.get("FAULTIVA_STAGE",
                             Path(SPECPATH).resolve().parent))
@@ -32,6 +32,8 @@ REQUIRED = [
     "data/hmac_golden_netlist_graph_11d1a.npz",
     "docs/FEATURE_SCALING_CONVENTION.json",
     "app/ui/index.html",
+    "app/ui/faultiva.ico",
+    "app/characterize_api.py",
 ]
 
 datas = []
@@ -60,6 +62,10 @@ hiddenimports = [
     "faultiva.characterize.stimulus", "faultiva.characterize.campaign",
     "faultiva.characterize.selftest",
     "app",
+    # imported by name inside app/app.py, so analysis cannot find it
+    "characterize_api",
+    "faultiva.characterize.campaign",
+    "yaml",
     "sklearn.neural_network._multilayer_perceptron",
     "sklearn.preprocessing._label",
     "sklearn.utils._typedefs",
@@ -92,6 +98,7 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
+    icon=str(STAGE / 'app' / 'ui' / 'faultiva.ico'),
 )
 coll = COLLECT(
     exe, a.binaries, a.datas,
