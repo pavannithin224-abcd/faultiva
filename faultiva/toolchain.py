@@ -178,12 +178,9 @@ def _probe_local(name: str) -> Tool:
         if version:
             return _mark(Tool(name, True, env, version, "override"))
 
-    found = shutil.which(name)
-    if found:
-        version = _clean_version(name, _run([found, _VERSION_FLAGS[name]]))
-        if version:
-            return _mark(Tool(name, True, found, version, "path"))
-
+    # The pinned suite is preferred over PATH: characterization output is only
+    # comparable to the frozen evidence when it comes from the same toolchain,
+    # and a distribution package (Yosys 0.9) otherwise shadows it.
     for hint in _SUITE_HINTS:
         candidate = Path(hint).expanduser() / name
         for path in (candidate, candidate.with_suffix(".exe")):
@@ -191,6 +188,12 @@ def _probe_local(name: str) -> Tool:
                 version = _clean_version(name, _run([str(path), _VERSION_FLAGS[name]]))
                 if version:
                     return _mark(Tool(name, True, str(path), version, "suite"))
+
+    found = shutil.which(name)
+    if found:
+        version = _clean_version(name, _run([found, _VERSION_FLAGS[name]]))
+        if version:
+            return _mark(Tool(name, True, found, version, "path"))
 
     return Tool(name)
 
@@ -206,18 +209,73 @@ def _wsl_distros() -> list[str]:
     return [d.strip() for d in out.replace("\x00", "").splitlines() if d.strip()]
 
 
+def _wsl_ok(cmd: list[str]) -> bool:
+    """True when the command exits zero.
+
+    Distinct from `_run`, which reports None for an empty stdout - `test -x`
+    says nothing when it succeeds, so its status is the only signal.
+    """
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=_TIMEOUT,
+                              creationflags=0x08000000 if WINDOWS else 0)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return False
+    return proc.returncode == 0
+
+
+def _wsl_home(distro: str) -> str | None:
+    """The distro's home directory, resolved once and used as a literal.
+
+    Shell variables are unusable in the probe below: `$HOME` and `$p` arrive
+    at bash already expanded to nothing when a command crosses from Windows
+    into WSL, so any test against them silently examines the empty string.
+    """
+    out = _run(["wsl.exe", "-d", distro, "--", "printenv", "HOME"])
+    if not out:
+        return None
+    home = out.replace("\x00", "").strip().splitlines()[0].strip()
+    return home or None
+
+
+def _wsl_candidates(name: str, home: str | None) -> list[str]:
+    """Where to look, best first.
+
+    The pinned OSS CAD Suite leads deliberately: characterization output is
+    only comparable to the frozen evidence when it comes from the same
+    toolchain, so matching the pin beats finding something newer.
+    """
+    paths: list[str] = []
+    if home:
+        paths += [f"{home}/tools/oss-cad-suite/bin/{name}",
+                  f"{home}/oss-cad-suite/bin/{name}"]
+    paths += [f"/opt/oss-cad-suite/bin/{name}",
+              f"/usr/local/oss-cad-suite/bin/{name}"]
+    if home:
+        paths.append(f"{home}/.local/bin/{name}")
+    paths += [f"/usr/local/bin/{name}", f"/usr/bin/{name}"]
+    return paths
+
+
 def _probe_wsl(name: str, distro: str) -> Tool:
-    """Look for a tool inside a WSL distro, including the OSS CAD Suite path."""
-    script = (
-        'for p in "$HOME/tools/oss-cad-suite/bin/{0}" '
-        '"$HOME/oss-cad-suite/bin/{0}" "$HOME/.local/bin/{0}"; do '
-        '[ -x "$p" ] && echo "$p" && exit 0; done; '
-        'command -v {0} 2>/dev/null'
-    ).format(name)
-    where = _run(["wsl.exe", "-d", distro, "--", "bash", "-lc", script])
-    if not where:
-        return Tool(name)
-    where = where.replace("\x00", "").strip().splitlines()[0].strip()
+    """Look for a tool inside a WSL distro, preferring the pinned suite.
+
+    Each candidate is tested as a literal argv entry - no shell, no variables,
+    no loop - because variable expansion does not survive the crossing from
+    Windows into WSL.
+    """
+    where = None
+    for candidate in _wsl_candidates(name, _wsl_home(distro)):
+        if _wsl_ok(["wsl.exe", "-d", distro, "--", "test", "-x", candidate]):
+            where = candidate
+            break
+
+    if where is None:
+        # not in any known location; accept whatever PATH offers
+        out = _run(["wsl.exe", "-d", distro, "--", "command", "-v", name])
+        if not out:
+            return Tool(name)
+        where = out.replace("\x00", "").strip().splitlines()[0].strip()
     if not where:
         return Tool(name)
     banner = _run(["wsl.exe", "-d", distro, "--", "bash", "-lc",
