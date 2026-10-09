@@ -175,6 +175,46 @@ def synthesize(cfg: CircuitConfig, work: Path, yosys: str) -> Path:
     return netlist
 
 
+def check_ports(cfg: CircuitConfig, netlist: Path) -> None:
+    """Confirm the config's pin names exist on the top module.
+
+    Verilator would catch this too, but only after a full build, and its
+    PINNOTFOUND output buries the answer.  The netlist already knows.
+    """
+    try:
+        data = json.loads(netlist.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return                      # not worth failing the run over
+
+    modules = data.get("modules") or {}
+    module = modules.get(cfg.top) or (
+        next(iter(modules.values())) if len(modules) == 1 else None)
+    if not module:
+        return
+    ports = set(module.get("ports") or {})
+    if not ports:
+        return
+
+    wanted = [(cfg.clock, "clock"), (cfg.reset.name, "reset"),
+              (cfg.start.name, "start"), (cfg.done.name, "done"),
+              (cfg.output.name, "output")]
+    wanted += [(p.name, "input") for p in cfg.inputs]
+    wanted += [(cst.name, "constant") for cst in getattr(cfg, "constants", [])]
+
+    missing = [(name, role) for name, role in wanted
+               if name and name not in ports]
+    if not missing:
+        return
+
+    have = ", ".join(sorted(ports))
+    lost = "; ".join(f"{role} '{name}'" for name, role in missing)
+    raise CampaignError(
+        f"module '{cfg.top}' has no {lost}.  Its ports are: {have}.  "
+        "Check the top module and the port names in your config - a wrapper "
+        "often exposes a bus interface while the handshake signals belong to "
+        "the core module inside it.")
+
+
 def build_simulator(cfg: CircuitConfig, work: Path, instrumented_v: Path,
                     testbench: Path, verilator: str) -> Path:
     obj = work / "obj_dir"
@@ -274,10 +314,21 @@ def build_catalogue(signatures: dict[tuple[int, int], str]
 
 
 # ------------------------------------------------------------------ campaign
+def _emit(*args: Any) -> None:
+    """Print and flush.
+
+    Progress is read line by line by a parent process through a pipe, and a
+    pipe is block-buffered: without the flush the panel shows nothing until
+    the campaign ends.  `-u` cannot be relied on - the frozen worker is not
+    python and never sees that flag.
+    """
+    print(*args, flush=True)
+
+
 def characterize(cfg: CircuitConfig, out_root: Path, *,
                  workers: int = 10, work_dir: Path | None = None,
                  yosys: str | None = None, verilator: str | None = None,
-                 resume: bool = True, progress=print) -> dict[str, Any]:
+                 resume: bool = True, progress=_emit) -> dict[str, Any]:
     """Characterize a circuit end to end.  Returns the manifest."""
     yosys_bin = _tool("yosys", yosys)
     verilator_bin = _tool("verilator", verilator)
@@ -312,6 +363,7 @@ def characterize(cfg: CircuitConfig, out_root: Path, *,
     netlist = synthesize(cfg, work, yosys_bin)
 
     progress("[2/7] enumerating fault sites")
+    check_ports(cfg, netlist)
     sites = enumerate_sites(cfg.circuit, netlist, cfg.top)
     summary = site_summary(sites)
     progress(f"      {summary['sites']:,} sites, {summary['faults']:,} faults, "
@@ -335,12 +387,27 @@ def characterize(cfg: CircuitConfig, out_root: Path, *,
 
     progress("[5/7] capturing fault-free baseline")
     base_csv = work / "baseline.csv"
+    base_log = work / "logs/baseline.log"
     if _run([str(binary), "+MODE=VALIDATE", f"+CSV={base_csv}"],
-            work / "logs/baseline.log", BATCH_TIMEOUT) != 0:
+            base_log, BATCH_TIMEOUT) != 0:
         raise CampaignError(
-            f"baseline sweep failed; see {work/'logs/baseline.log'}.  The "
+            f"baseline sweep failed; see {base_log}.  The "
             "design did not complete a fault-free transaction - check the "
             "clock, reset polarity, start/done names and cycle_budget.")
+
+    # $readmem failing is only a warning to the simulator, but it means the
+    # vectors were never loaded: the "baseline" would be of all-zero stimulus
+    # rather than of the design, and a catalogue built on it would look valid.
+    log_text = base_log.read_text(encoding="utf-8", errors="replace")
+    if "readmem" in log_text and "not found" in log_text:
+        detail = next((ln.strip() for ln in log_text.splitlines()
+                       if "readmem" in ln and "not found" in ln), "")
+        raise CampaignError(
+            "the simulator could not open its stimulus files, so the baseline "
+            "would be of all-zero input rather than of your design"
+            + (f" ({detail[:160]})" if detail else "")
+            + ".  This usually means the simulator runs in a different "
+              "filesystem from this process.")
     with open(base_csv, newline="", encoding="utf-8") as handle:
         base_rows = list(csv.DictReader(handle))
     if len(base_rows) != cfg.vectors:

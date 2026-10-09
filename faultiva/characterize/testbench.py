@@ -56,8 +56,26 @@ RESPONSE_HEX = RESPONSE_BITS // 4
 
 
 def _sv_path(path) -> str:
-    """Forward slashes for $readmemh, which dislikes backslashes."""
-    return str(path).replace("\\", "/")
+    """The path as the *simulator* will see it.
+
+    $readmemh dislikes backslashes, and the simulator may not share this
+    machine's filesystem: when the tools run inside WSL a `C:/...` path does
+    not exist there, $readmem silently finds nothing, and every vector array
+    keeps its default - a baseline of all-zero stimulus rather than of the
+    design.
+    """
+    from . import wslbridge
+
+    text = str(path).replace("\\", "/")
+    bridge = wslbridge.DIRECT
+    try:                        # the campaign sets this when it starts
+        from .campaign import active_bridge
+        bridge = active_bridge()
+    except Exception:           # noqa: BLE001 - testbench may be used alone
+        pass
+    if bridge.active:
+        text = wslbridge.to_wsl_path(text)
+    return text
 
 
 def _active(signal) -> tuple[str, str]:

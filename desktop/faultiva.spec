@@ -12,11 +12,7 @@ cleanly and then fails at the first request.
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
-# payload root: the directory this spec lives beside, or FAULTIVA_STAGE
-# when the build runs from a staging copy
-import os
-STAGE = Path(os.environ.get("FAULTIVA_STAGE",
-                            Path(SPECPATH).resolve().parent))
+STAGE = Path(r"C:\Users\1\faultiva_build\stage")
 
 REQUIRED = [
     "models/faultiva_signature_dictionary.npz",
@@ -61,6 +57,9 @@ hiddenimports = [
     "faultiva.characterize.netlist", "faultiva.characterize.testbench",
     "faultiva.characterize.stimulus", "faultiva.characterize.campaign",
     "faultiva.characterize.selftest",
+    # reached only by the frozen worker's re-exec, so analysis cannot see it
+    "faultiva.characterize.__main__",
+    "faultiva.characterize.wslbridge",
     "app",
     # imported by name inside app/app.py, so analysis cannot find it
     "characterize_api",

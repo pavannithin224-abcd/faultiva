@@ -178,7 +178,23 @@ def _serve(host: str, port: int) -> None:
         _note("server thread failed\n" + _SERVER_ERROR[-1])
 
 
+# Internal marker: the frozen exe is its own python, so it re-execs itself to
+# run a characterization campaign as a child process.  Checked before the GUI
+# argument parser, which would otherwise reject the worker's arguments.
+WORKER_FLAG = "--characterize-worker"
+
+
+def _run_worker(argv: list[str]) -> int:
+    """Hand the remaining arguments to the characterize CLI."""
+    from faultiva.characterize.__main__ import main as characterize_main
+    return characterize_main(argv)
+
+
 def main(argv: list[str] | None = None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] == WORKER_FLAG:
+        return _run_worker(raw[1:])
+
     parser = argparse.ArgumentParser(prog="faultiva",
                                      description=f"{APP_NAME} {APP_VERSION}")
     parser.add_argument("--port", type=int, default=0,

@@ -188,9 +188,25 @@ def _parse_progress(job: Job, line: str) -> None:
 
 def _runner(job: Job, config: Path, out: Path, workers: int) -> None:
     """Drive the characterize CLI and stream its progress into the job."""
-    cmd = [sys.executable, "-u", "-m", "faultiva.characterize",
-           "--config", str(config), "--out", str(out),
-           "--workers", str(workers)]
+    # Frozen, sys.executable is the app itself, not python: it cannot be
+    # asked to run `-m faultiva.characterize`, so it re-execs with an internal
+    # marker and dispatches to the same CLI.
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--characterize-worker"]
+    else:
+        cmd = [sys.executable, "-u", "-m", "faultiva.characterize"]
+    cmd += ["--config", str(config), "--out", str(out),
+            "--workers", str(workers)]
+
+    # The child looks for its tools on PATH only, so a toolchain that lives
+    # inside WSL is invisible to it.  Hand over what detection already found -
+    # the same answer the toolchain panel shows.
+    from faultiva import toolchain as tc
+    chain = tc.detect()
+    if chain.yosys.found and chain.yosys.path:
+        cmd += ["--yosys", str(chain.yosys.path)]
+    if chain.verilator.found and chain.verilator.path:
+        cmd += ["--verilator", str(chain.verilator.path)]
     env = dict(os.environ)
     env["PYTHONUNBUFFERED"] = "1"
     try:
@@ -363,6 +379,9 @@ async def api_preflight(request: Request) -> JSONResponse:
         netlist_path = cp.synthesize(cfg, work, chain.yosys.path)
         seconds = time.time() - began
 
+        # the same check the campaign runs, so the button that exists to
+        # catch configuration mistakes actually catches them
+        cp.check_ports(cfg, netlist_path)
         sites = nl.enumerate_sites(cfg.circuit, netlist_path, cfg.top)
         summary = nl.site_summary(sites)
 

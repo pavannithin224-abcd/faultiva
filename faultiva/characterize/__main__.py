@@ -40,6 +40,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="ignore an existing checkpoint and start over")
     args = parser.parse_args(argv)
 
+    # a pipe is block-buffered; the parent reads this stream live
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass
+
     from .config import ConfigError, load_config
 
     try:
