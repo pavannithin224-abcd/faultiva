@@ -787,26 +787,32 @@ a3f1c92b…9c22                                                   0        0    
         <div class="grid3">
           <div class="fld"><label for="cz-top">TOP MODULE</label>
             <input id="cz-top" placeholder="detected from the file"></div>
+          <datalist id="cz-portlist"></datalist>
           <div class="fld"><label for="cz-clock">CLOCK</label>
-            <input id="cz-clock" value="clk"></div>
+            <input id="cz-clock" value="clk" list="cz-portlist"></div>
           <div class="fld"><label for="cz-reset">RESET (active low)</label>
-            <input id="cz-reset" value="rst_n"></div>
+            <input id="cz-reset" value="rst_n" list="cz-portlist"></div>
           <div class="fld"><label for="cz-start">START</label>
-            <input id="cz-start" value="start"></div>
+            <input id="cz-start" value="start" list="cz-portlist"></div>
           <div class="fld"><label for="cz-done">DONE</label>
-            <input id="cz-done" value="done"></div>
+            <input id="cz-done" value="done" list="cz-portlist"></div>
           <div class="fld"><label for="cz-vectors">TEST VECTORS</label>
             <input id="cz-vectors" value="64"></div>
           <div class="fld"><label for="cz-din">DATA IN</label>
-            <input id="cz-din" value="data_i"></div>
+            <input id="cz-din" value="data_i" list="cz-portlist"></div>
           <div class="fld"><label for="cz-dinw">DATA IN WIDTH</label>
             <input id="cz-dinw" value="32"></div>
           <div class="fld"><label for="cz-dout">DATA OUT</label>
-            <input id="cz-dout" value="result_o"></div>
+            <input id="cz-dout" value="result_o" list="cz-portlist"></div>
           <div class="fld"><label for="cz-doutw">DATA OUT WIDTH</label>
             <input id="cz-doutw" value="32"></div>
           <div class="fld"><label for="cz-name-id">CIRCUIT NAME</label>
             <input id="cz-name-id" placeholder="my_core"></div>
+
+          <div class="fld wide" id="cz-ports-row" hidden>
+            <label>PORTS FOUND</label>
+            <p class="fh mono" id="cz-ports"></p>
+          </div>
 
           <div class="fld wide">
             <label for="cz-const">HELD CONSTANTS <span class="opt">optional</span></label>
@@ -1247,6 +1253,80 @@ function render(d) {
     }
   });
 
+  /* Read the top module's port list and fill in what is unambiguous.
+     Direction and width come from the declaration, so the data ports and
+     their widths are known rather than guessed.  Start and done are left
+     alone: no name rule would pick SipHash's `finalize` / `siphash_word_valid`,
+     and a wrong guess is worse than an empty field. */
+  function applyPorts(text, top){
+    var head = text.match(new RegExp("module\\s+" + top + "\\s*(?:#\\s*\\([^]*?\\))?\\s*\\(([^]*?)\\)\\s*;"));
+    var body = head ? head[1] : "";
+    var ports = [], seen = {};
+    body.split(/,(?![^\[]*\])/).forEach(function(chunk){
+      var m = chunk.match(/\b(input|output|inout)\b[^]*?(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?\s*([A-Za-z_]\w*)\s*$/);
+      if (!m) return;
+      var w = m[2] !== undefined ? Math.abs(parseInt(m[2],10) - parseInt(m[3],10)) + 1 : 1;
+      if (seen[m[4]]) return;
+      seen[m[4]] = true;
+      ports.push({dir:m[1], width:w, name:m[4]});
+    });
+    if (!ports.length) return;
+
+    var dl = document.getElementById("cz-portlist");
+    if (dl) dl.innerHTML = ports.map(function(p){
+      return '<option value="' + p.name + '">';
+    }).join("");
+
+    var row = document.getElementById("cz-ports-row");
+    var box = document.getElementById("cz-ports");
+    if (box){
+      box.innerHTML = ports.map(function(p){
+        return esc(p.name) + (p.width > 1 ? "[" + p.width + "]" : "");
+      }).join(" \u00b7 ");
+      if (row) row.hidden = false;
+    }
+
+    function set(id, val){
+      var el = document.getElementById(id);
+      if (el && val) el.value = val;
+    }
+    function find(re, dir){
+      for (var i = 0; i < ports.length; i++)
+        if ((!dir || ports[i].dir === dir) && re.test(ports[i].name))
+          return ports[i];
+      return null;
+    }
+    function widest(dir, skip){
+      var best = null;
+      ports.forEach(function(p){
+        if (p.dir !== dir || skip[p.name]) return;
+        if (!best || p.width > best.width) best = p;
+      });
+      return best;
+    }
+
+    var clk = find(/^(clk|clock)\b|_clk$/i, "input");
+    var rst = find(/reset|rst/i, "input");
+    if (clk) set("cz-clock", clk.name);
+    if (rst){
+      set("cz-reset", rst.name);
+      var lbl = document.querySelector('label[for="cz-reset"]');
+      var low = /_n$|_ni$|negedge/i.test(rst.name);
+      if (lbl) lbl.textContent = "RESET (active " + (low ? "low" : "high") + ")";
+    }
+
+    var skip = {};
+    if (clk) skip[clk.name] = true;
+    if (rst) skip[rst.name] = true;
+    var din = widest("input", skip), dout = widest("output", {});
+    if (din && din.width > 1){
+      set("cz-din", din.name); set("cz-dinw", String(din.width));
+    }
+    if (dout && dout.width > 1){
+      set("cz-dout", dout.name); set("cz-doutw", String(dout.width));
+    }
+  }
+
   wire({
     zone:"rtl-drop", input:"cz-rtl", name:"cz-name", icon:"rtl-ic",
     head:"rtl-head", clear:"clr-rtl",
@@ -1272,6 +1352,8 @@ function render(d) {
         if (top && !top.value) top.value = pick;
         if (cid && !cid.value) cid.value = pick;
       }
+
+      applyPorts(text, pick);
 
       var size = files.reduce(function(n, f){ return n + f.size; }, 0);
       var lines = text.split(/\r?\n/).length;

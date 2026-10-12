@@ -206,13 +206,41 @@ def check_ports(cfg: CircuitConfig, netlist: Path) -> None:
     if not missing:
         return
 
-    have = ", ".join(sorted(ports))
     lost = "; ".join(f"{role} '{name}'" for name, role in missing)
-    raise CampaignError(
-        f"module '{cfg.top}' has no {lost}.  Its ports are: {have}.  "
+    message = [f"module '{cfg.top}' has no {lost}."]
+
+    # Narrow the list by direction where it helps: a start is a one-bit input,
+    # a done is a one-bit output, and on a sixteen-port module that is the
+    # difference between a hint and a wall of names.
+    roles_missing = {role for _, role in missing}
+    details = module.get("ports") or {}
+
+    def one_bit(direction: str) -> list[str]:
+        out = []
+        for name, spec in sorted(details.items()):
+            if spec.get("direction") != direction:
+                continue
+            if len(spec.get("bits") or []) == 1:
+                out.append(name)
+        return out
+
+    if "start" in roles_missing:
+        cands = one_bit("input")
+        if cands:
+            message.append("One-bit inputs (a start is usually one of these): "
+                           + ", ".join(cands) + ".")
+    if "done" in roles_missing:
+        cands = one_bit("output")
+        if cands:
+            message.append("One-bit outputs (a done is usually one of these): "
+                           + ", ".join(cands) + ".")
+
+    message.append("All ports: " + ", ".join(sorted(ports)) + ".")
+    message.append(
         "Check the top module and the port names in your config - a wrapper "
         "often exposes a bus interface while the handshake signals belong to "
         "the core module inside it.")
+    raise CampaignError("  ".join(message))
 
 
 def build_simulator(cfg: CircuitConfig, work: Path, instrumented_v: Path,
