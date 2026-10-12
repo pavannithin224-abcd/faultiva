@@ -1069,6 +1069,12 @@ function render(d) {
 </script>
 <script>
 /* ── view routing: each section is its own page ── */
+/* Shared between the upload block, which reads the design, and the
+   characterize block, which submits it.  A `var` inside either one is
+   invisible to the other - reading it there throws before fetch is even
+   called, which leaves the button spinning forever. */
+var FV = { portWidth: {} };
+
 (function(){
   var VIEWS = ["overview","how","analyse","limits","characterize"];
   function show(name, push){
@@ -1266,9 +1272,14 @@ function render(d) {
      their widths are known rather than guessed.  Start and done are left
      alone: no name rule would pick SipHash's `finalize` / `siphash_word_valid`,
      and a wrong guess is worse than an empty field. */
-  /* Width per port on the loaded design, so the constants box can stay free
-     of numbers the user should not have to type. */
-  var PORT_WIDTH = {};
+  /* `esc` is a const in the first script block and invisible here; this
+     function previously called it and threw halfway through, leaving the
+     form on its defaults with no error shown. */
+  function escAttr(s){
+    return String(s).replace(/[&<>"]/g, function(ch){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch];
+    });
+  }
 
   function applyPorts(text, top){
     var head = text.match(new RegExp("module\\s+" + top + "\\s*(?:#\\s*\\([^]*?\\))?\\s*\\(([^]*?)\\)\\s*;"));
@@ -1293,7 +1304,7 @@ function render(d) {
     var box = document.getElementById("cz-ports");
     if (box){
       box.innerHTML = ports.map(function(p){
-        return esc(p.name) + (p.width > 1 ? "[" + p.width + "]" : "");
+        return escAttr(p.name) + (p.width > 1 ? "[" + p.width + "]" : "");
       }).join(" \u00b7 ");
       if (row) row.hidden = false;
     }
@@ -1360,8 +1371,8 @@ function render(d) {
         /* Widths are known from the design, so they are not printed: a
            `name[4] = 0` line invites editing the 4, which changes the pin's
            width instead of its value.  Kept here and reattached on send. */
-        PORT_WIDTH = {};
-        ports.forEach(function(p){ PORT_WIDTH[p.name] = p.width; });
+        FV.portWidth = {};
+        ports.forEach(function(p){ FV.portWidth[p.name] = p.width; });
         box.value = held.map(function(p){
           return p.name + " = 0";
         }).join("\n");
@@ -1558,7 +1569,8 @@ function render(d) {
         var entry = {name:m[1], value:m[3].trim()};
         // an explicit [width] wins; otherwise use the design's own
         if (m[2]) entry.width = parseInt(m[2], 10);
-        else if (PORT_WIDTH[m[1]]) entry.width = PORT_WIDTH[m[1]];
+        else if (FV.portWidth && FV.portWidth[m[1]])
+          entry.width = FV.portWidth[m[1]];
         consts.push(entry);
       });
       if (consts.length) fd.append("constants", JSON.stringify(consts));
