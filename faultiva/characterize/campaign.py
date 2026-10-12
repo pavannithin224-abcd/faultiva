@@ -103,8 +103,12 @@ def _run(command: list[str], log: Path, timeout: int) -> int:
     with open(log, "w", encoding="utf-8", errors="replace") as handle:
         handle.write("$ " + " ".join(argv) + "\n\n")
         handle.flush()
+        # Every wsl.exe call is a console program, so without this a campaign
+        # opens a window per tool invocation - one per batch - each stealing
+        # focus.  Zero off Windows.
         proc = subprocess.run(argv, stdout=handle, stderr=subprocess.STDOUT,
-                              timeout=timeout)
+                              timeout=timeout,
+                              creationflags=wslbridge._NO_WINDOW)
     return proc.returncode
 
 
@@ -173,6 +177,30 @@ def synthesize(cfg: CircuitConfig, work: Path, yosys: str) -> Path:
             "Common causes: a module the file list does not include, an "
             "unsupported SystemVerilog construct, or a wrong top module name.")
     return netlist
+
+
+def _held_at_zero_hint(cfg: CircuitConfig) -> str:
+    """Point at held pins that are probably why nothing completed.
+
+    A count or round number held at zero is the classic cause: the design is
+    asked to run zero iterations and never reaches done.
+    """
+    suspects = []
+    for const in getattr(cfg, "constants", None) or []:
+        name = str(getattr(const, "name", "") or "")
+        try:
+            value = int(getattr(const, "value", 0))
+        except (TypeError, ValueError):
+            continue
+        if value == 0 and any(word in name.lower() for word in
+                              ("round", "count", "len", "size", "num",
+                               "cycle", "iter")):
+            suspects.append(name)
+    if not suspects:
+        return ""
+    return ("  These held constants are 0 and look like counts, which would "
+            "stop the design ever finishing: " + ", ".join(suspects)
+            + ".  Give them the value your design expects.")
 
 
 def check_ports(cfg: CircuitConfig, netlist: Path) -> None:
@@ -453,7 +481,8 @@ def characterize(cfg: CircuitConfig, out_root: Path, *,
         raise CampaignError(
             "every fault-free transaction timed out - the design never "
             "asserted done.  Check the done signal name and polarity, and "
-            "raise cycle_budget if the design needs longer.")
+            "raise cycle_budget if the design needs longer."
+            + _held_at_zero_hint(cfg))
     progress(f"      {len(base_rows)} vectors, "
              f"{len({bytes(r) for r in golden})} distinct responses, "
              f"{timeouts} timeout(s)")

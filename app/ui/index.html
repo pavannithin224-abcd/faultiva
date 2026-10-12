@@ -350,6 +350,16 @@
   /* toolchain status rows.  NOT `.tool` - the analyser owns that name for
      its layout container, and a later `display:flex` here silently turned
      that container back into a row. */
+  .livebar{display:flex;align-items:center;gap:9px;margin:0 0 10px;
+           padding:7px 11px;border:1px solid var(--line);border-radius:6px;
+           background:var(--sunk)}
+  .livebar .lt{font-size:12px;color:var(--body)}
+  .livebar .lr{margin-left:auto;font:12px var(--mono);color:var(--ink)}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--ok);
+         flex-shrink:0;animation:beat 1.6s ease-in-out infinite}
+  .pulse.stall{background:var(--warn);animation:none}
+  @keyframes beat{0%,100%{opacity:1;transform:scale(1)}
+                  50%{opacity:.35;transform:scale(.72)}}
   .fld.wide{grid-column:1 / -1}
   .fld textarea{width:100%;box-sizing:border-box;padding:9px 11px;
                 border:1px solid var(--line);border-radius:6px;
@@ -816,11 +826,9 @@ a3f1c92b…9c22                                                   0        0    
 
           <div class="fld wide">
             <label for="cz-const">HELD CONSTANTS <span class="opt">optional</span></label>
-            <textarea id="cz-const" rows="3" spellcheck="false"
-              placeholder="compression_rounds[4] = 2&#10;final_rounds[4] = 4&#10;long = 1"></textarea>
-            <p class="fh">Pins held at one value for every vector &mdash; mode
-               bits, round counts, enables. Anything not listed sits at zero,
-               which can stop a design ever asserting done. One per line:
+            <textarea id="cz-const" rows="3" spellcheck="false"></textarea>
+            <p class="fh" id="cz-const-help">Pins held at one value for every
+               vector &mdash; mode bits, round counts, enables. One per line:
                <code>name = value</code> or <code>name[width] = value</code>.</p>
           </div>
         </div>
@@ -1325,6 +1333,44 @@ function render(d) {
     if (dout && dout.width > 1){
       set("cz-dout", dout.name); set("cz-doutw", String(dout.width));
     }
+
+    /* Every input the harness does not drive is held at whatever the config
+       says, and silently at zero when the config says nothing - which is how
+       a design ends up never asserting done.  List them so the user edits
+       values instead of having to work out the pin names. */
+    var box = document.getElementById("cz-const");
+    if (box && !box.value.trim()){
+      var driven = {};
+      if (clk) driven[clk.name] = true;
+      if (rst) driven[rst.name] = true;
+      if (din) driven[din.name] = true;
+      ["cz-start","cz-done"].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el && el.value) driven[el.value] = true;
+      });
+
+      var held = ports.filter(function(p){
+        return p.dir === "input" && !driven[p.name];
+      });
+      if (held.length){
+        box.value = held.map(function(p){
+          // a width wider than one bit is almost always a count or a mode
+          var guess = 0;
+          return p.name + (p.width > 1 ? "[" + p.width + "]" : "")
+               + " = " + guess;
+        }).join("\n");
+        box.rows = Math.min(8, Math.max(3, held.length));
+        var help = document.getElementById("cz-const-help");
+        if (help){
+          help.innerHTML = '<b>' + held.length + ' input'
+            + (held.length === 1 ? '' : 's')
+            + ' will be held at these values.</b> They are filled with 0; '
+            + 'round counts and mode pins usually need a real value, and a '
+            + 'count left at 0 can stop the design ever asserting done. '
+            + 'Edit the numbers, or delete a line to drop that pin.';
+        }
+      }
+    }
   }
 
   wire({
@@ -1494,6 +1540,14 @@ function render(d) {
         if (!line || line.charAt(0) === "#") return;
         var m = line.match(/^([A-Za-z_]\w*)\s*(?:\[\s*(\d+)\s*\])?\s*=\s*(.+)$/);
         if (!m) return;
+        // never hold the pins the harness drives: a start held at 0 is
+        // never pulsed and the design simply never runs
+        var driven = {};
+        ["cz-start","cz-done","cz-clock","cz-reset","cz-din"].forEach(function(o){
+          var e = document.getElementById(o);
+          if (e && e.value) driven[e.value] = true;
+        });
+        if (driven[m[1]]) return;
         var entry = {name:m[1], value:m[3].trim()};
         if (m[2]) entry.width = parseInt(m[2], 10);
         consts.push(entry);
@@ -1560,18 +1614,108 @@ function render(d) {
                 "Capture fault-free baseline","Simulate faults",
                 "Write catalogue"];
 
+  /* Seconds as a short duration: 45s, 3m 20s, 1h 04m. */
+  function dur(s){
+    s = Math.max(0, Math.round(s || 0));
+    if (s < 60) return s + "s";
+    var m = Math.floor(s / 60), r = s % 60;
+    if (m < 60) return m + "m" + (r ? " " + r + "s" : "");
+    var hh = Math.floor(m / 60), mm = m % 60;
+    return hh + "h" + (mm < 10 ? " 0" : " ") + mm + "m";
+  }
+
+  function ago(s){
+    s = Math.max(0, Math.round(s || 0));
+    return s < 2 ? "just now" : dur(s) + " ago";
+  }
+
+  /* The poll is every few seconds; tick locally so the clock does not freeze
+     between responses and look stopped. */
+  var JOB_ELAPSED = 0, JOB_TICK = null;
+
+  function startClock(seconds){
+    JOB_ELAPSED = seconds || 0;
+    if (JOB_TICK) clearInterval(JOB_TICK);
+    JOB_TICK = setInterval(function(){
+      JOB_ELAPSED += 1;
+      var el = document.getElementById("cz-clock");
+      if (el) el.textContent = dur(JOB_ELAPSED);
+      else { clearInterval(JOB_TICK); JOB_TICK = null; }
+    }, 1000);
+  }
+
+  function stopClock(){
+    if (JOB_TICK){ clearInterval(JOB_TICK); JOB_TICK = null; }
+  }
+
+  /* start/done are typed after the file is read, and they must not also be
+     listed as held constants - re-run the fill when either changes. */
+  ["cz-start","cz-done"].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    ["input", "change"].forEach(function(ev){
+    el.addEventListener(ev, function(){
+      var box = document.getElementById("cz-const");
+      if (!box || !box.value.trim()) return;
+      var drop = {};
+      ["cz-start","cz-done"].forEach(function(o){
+        var e = document.getElementById(o);
+        if (e && e.value) drop[e.value] = true;
+      });
+      box.value = box.value.split(/\r?\n/).filter(function(line){
+        var m = line.match(/^\s*([A-Za-z_]\w*)/);
+        return !(m && drop[m[1]]);
+      }).join("\n");
+      });
+    });
+  });
+
   function renderJob(j){
+    if (j.status === "running") startClock(j.elapsed_s);
+    else stopClock();
     var pct = j.batches_total
       ? Math.round(100 * j.batches_done / j.batches_total) : 0;
     var h = '<div class="cz-note' + (j.status === "failed" ? " bad"
             : j.status === "done" ? " good" : "") + '">';
     h += '<span class="t">' + (
-          j.status === "done"      ? "\u2713 " + esc2(j.circuit) + " is ready"
+          j.status === "done"      ? "\u2713 " + esc2(j.circuit) + " is ready in "
+                                     + dur(j.elapsed_s)
         : j.status === "failed"    ? "Characterization failed"
         : j.status === "cancelled" ? "Cancelled"
         : "Characterizing " + esc2(j.circuit)) + '</span>';
 
     if (j.status === "running"){
+      /* How long silence is normal depends on the phase.  Phase 4 hands the
+         design to Verilator and a C++ compiler, measured at ~160s of silence
+         on a 4,000-site design, so a flat threshold would call a healthy
+         build broken.  Phase 6 reports every tenth batch, so quiet there is
+         genuinely odd. */
+      var QUIET = {1:120, 2:60, 3:120, 4:600, 5:300, 6:180, 7:120};
+      var idle = j.idle_s == null ? 0 : j.idle_s;
+      var budget = QUIET[j.phase] || 120;
+      var live = idle < budget;
+
+      /* Say what the quiet phase is actually doing - "compiling the
+         simulator" is an explanation, a spinner is not. */
+      var BUSY = {
+        1:"yosys is synthesizing",
+        3:"rewriting the netlist",
+        4:"verilator is compiling the simulator \u2014 this is the slow step",
+        5:"running the fault-free baseline",
+        7:"writing the catalogue"
+      };
+      var note = (idle > 12 && BUSY[j.phase]) ? BUSY[j.phase] : null;
+
+      h += '<div class="livebar">'
+         + '<span class="pulse' + (live ? '' : ' stall') + '"></span>'
+         + '<span class="lt">' + (live
+             ? (note ? esc2(note) : 'running')
+               + ' \u00b7 last output ' + ago(idle)
+             : 'nothing for ' + ago(idle)
+               + ' \u2014 longer than this phase usually takes')
+           + '</span>'
+         + '<span class="lr" id="cz-clock">' + dur(JOB_ELAPSED) + '</span>'
+         + '</div>';
       h += '<p style="margin:0 0 10px;font-size:12.5px;color:var(--mut)">'
          + 'You can leave this page \u2014 the run continues and resumes if '
          + 'interrupted.</p>';
@@ -1589,6 +1733,12 @@ function render(d) {
               + j.batches_done + " / " + j.batches_total;
       }
       else if (n === 2 && j.sites) extra = j.sites.toLocaleString() + " sites";
+      // how long the current phase has taken: a long build reads as slow,
+      // not broken
+      if (n === j.phase && j.status === "running" && j.phase_elapsed_s > 20
+          && !(n === 6 && j.batches_total)){
+        extra = (extra ? extra + " \u00b7 " : "") + dur(j.phase_elapsed_s);
+      }
       h += '<div class="ph ' + cls + '"><span class="pi">' + mark + '</span>'
          + '<span class="pt">' + n + ' \u00b7 ' + PHASES[i] + '</span>'
          + '<span class="pm">' + extra + '</span></div>';

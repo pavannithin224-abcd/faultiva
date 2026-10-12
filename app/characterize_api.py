@@ -93,6 +93,10 @@ class Job:
     sites: int = 0
     failures: int = 0
     started: float = field(default_factory=time.time)
+    # when the child last printed anything: the difference between a slow
+    # phase and a stuck one
+    last_output: float = field(default_factory=time.time)
+    phase_started: float = field(default_factory=time.time)
     finished: float | None = None
     status: str = "running"          # running | done | failed | cancelled
     error: str | None = None
@@ -100,7 +104,8 @@ class Job:
     process: subprocess.Popen | None = None
 
     def snapshot(self) -> dict:
-        elapsed = (self.finished or time.time()) - self.started
+        _now = self.finished or time.time()
+        elapsed = _now - self.started
         remaining = None
         if self.status == "running" and self.batches_done and self.batches_total:
             per = elapsed / self.batches_done
@@ -117,6 +122,8 @@ class Job:
             "faults_total": self.faults_total,
             "failures": self.failures,
             "elapsed_s": round(elapsed, 1),
+            "idle_s": round(max(0.0, _now - self.last_output), 1),
+            "phase_elapsed_s": round(max(0.0, _now - self.phase_started), 1),
             "remaining_s": round(remaining, 1) if remaining is not None else None,
             "error": self.error,
             "log": self.lines[-14:],
@@ -158,6 +165,8 @@ def _parse_progress(job: Job, line: str) -> None:
     m = re.match(r"\s*\[(\d+)\s*/\s*7\]", low)
     if m:
         num = int(m.group(1))
+        if num > job.phase:
+            job.phase_started = time.time()   # time this phase, not the run
         if num >= job.phase:
             job.phase = num
             job.phase_name = PHASE_NAMES.get(num, line.strip()[:48])
@@ -213,13 +222,17 @@ def _runner(job: Job, config: Path, out: Path, workers: int) -> None:
         job.process = subprocess.Popen(
             cmd, cwd=str(_repo_root()), env=env,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1)
+            text=True, bufsize=1,
+            # the worker is the app re-execing itself; without this it opens
+            # a second console behind the window
+            creationflags=0x08000000 if sys.platform == "win32" else 0)
         assert job.process.stdout is not None
         for raw in job.process.stdout:
             line = raw.rstrip()
             if not line:
                 continue
             job.lines.append(line)
+            job.last_output = time.time()      # proof the child is alive
             _parse_progress(job, line)
         code = job.process.wait()
         if job.status == "cancelled":
