@@ -446,7 +446,40 @@ def _normalise_constants(raw) -> list[dict]:
     when the pin is wider than its value needs.
     """
     if isinstance(raw, list):
-        return raw                      # already in schema form
+        # Close to schema form, but not necessarily complete: a one-bit pin
+        # has no width to write, and a form sends every value as a string.
+        fixed = []
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                raise ValueError(f"constants[{i}]: expected an object")
+            name = str(item.get("name") or "").strip()
+            if not name:
+                raise ValueError(f"constants[{i}]: missing 'name'")
+            try:
+                held = int(str(item.get("value", 0)).strip(), 0)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"{name}: value must be a number, got "
+                    f"{item.get('value')!r}") from None
+            if held < 0:
+                raise ValueError(f"{name}: must be >= 0")
+            if item.get("width") in (None, ""):
+                width = max(1, held.bit_length())
+            else:
+                try:
+                    width = int(item["width"])
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"{name}: width must be a number, got "
+                        f"{item['width']!r}") from None
+            if width < 1:
+                raise ValueError(f"{name}: width must be at least 1")
+            if held >= (1 << width):
+                raise ValueError(
+                    f"{name}: {held} needs more than {width} bit(s).  The "
+                    "number in brackets is the pin's width, not its value.")
+            fixed.append({"name": name, "width": width, "value": held})
+        return fixed
     if not isinstance(raw, dict):
         raise ValueError("expected a mapping or a list")
 

@@ -829,7 +829,7 @@ a3f1c92b…9c22                                                   0        0    
             <textarea id="cz-const" rows="3" spellcheck="false"></textarea>
             <p class="fh" id="cz-const-help">Pins held at one value for every
                vector &mdash; mode bits, round counts, enables. One per line:
-               <code>name = value</code> or <code>name[width] = value</code>.</p>
+               <code>pin = value</code>.</p>
           </div>
         </div>
 
@@ -1266,6 +1266,10 @@ function render(d) {
      their widths are known rather than guessed.  Start and done are left
      alone: no name rule would pick SipHash's `finalize` / `siphash_word_valid`,
      and a wrong guess is worse than an empty field. */
+  /* Width per port on the loaded design, so the constants box can stay free
+     of numbers the user should not have to type. */
+  var PORT_WIDTH = {};
+
   function applyPorts(text, top){
     var head = text.match(new RegExp("module\\s+" + top + "\\s*(?:#\\s*\\([^]*?\\))?\\s*\\(([^]*?)\\)\\s*;"));
     var body = head ? head[1] : "";
@@ -1353,21 +1357,24 @@ function render(d) {
         return p.dir === "input" && !driven[p.name];
       });
       if (held.length){
+        /* Widths are known from the design, so they are not printed: a
+           `name[4] = 0` line invites editing the 4, which changes the pin's
+           width instead of its value.  Kept here and reattached on send. */
+        PORT_WIDTH = {};
+        ports.forEach(function(p){ PORT_WIDTH[p.name] = p.width; });
         box.value = held.map(function(p){
-          // a width wider than one bit is almost always a count or a mode
-          var guess = 0;
-          return p.name + (p.width > 1 ? "[" + p.width + "]" : "")
-               + " = " + guess;
+          return p.name + " = 0";
         }).join("\n");
         box.rows = Math.min(8, Math.max(3, held.length));
         var help = document.getElementById("cz-const-help");
         if (help){
           help.innerHTML = '<b>' + held.length + ' input'
             + (held.length === 1 ? '' : 's')
-            + ' will be held at these values.</b> They are filled with 0; '
-            + 'round counts and mode pins usually need a real value, and a '
-            + 'count left at 0 can stop the design ever asserting done. '
-            + 'Edit the numbers, or delete a line to drop that pin.';
+            + ' will be held at these values.</b> Each line is '
+            + '<code>pin = value</code>, and the widths come from your design. '
+            + 'They start at 0; round counts and mode pins usually need a real '
+            + 'value, and a count left at 0 can stop the design ever asserting '
+            + 'done. Edit the numbers, or delete a line to drop that pin.';
         }
       }
     }
@@ -1549,7 +1556,9 @@ function render(d) {
         });
         if (driven[m[1]]) return;
         var entry = {name:m[1], value:m[3].trim()};
+        // an explicit [width] wins; otherwise use the design's own
         if (m[2]) entry.width = parseInt(m[2], 10);
+        else if (PORT_WIDTH[m[1]]) entry.width = PORT_WIDTH[m[1]];
         consts.push(entry);
       });
       if (consts.length) fd.append("constants", JSON.stringify(consts));
