@@ -60,6 +60,7 @@ REPO_URL = "https://github.com/pavannithin224-abcd/faultiva"
 MAX_BYTES = 64 * 1024 * 1024
 
 _f: Faultiva | None = None
+_f_stamp: tuple = ()
 _lock = threading.Lock()
 
 
@@ -119,11 +120,39 @@ def net_of(family: str, site: int):
     return (name or None), (cat or None)
 
 
+def _user_stamp() -> tuple:
+    """What the user catalogue looks like right now.
+
+    Cheap enough to check on every request: the directory names plus each
+    catalogue's size and mtime.  Comparing this against the stamp the engine
+    was built with is what lets a circuit characterized in this session show
+    up without restarting the app.
+    """
+    try:
+        from faultiva import Faultiva as _FV
+        roots = _FV.user_circuit_roots()
+    except Exception:                                   # noqa: BLE001
+        return ()
+    out = []
+    for root in roots:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir()):
+            cat = child / "catalogue.npz"
+            if cat.is_file():
+                st = cat.stat()
+                out.append((child.name, st.st_size, int(st.st_mtime)))
+    return tuple(out)
+
+
 def engine() -> Faultiva:
-    global _f
+    global _f, _f_stamp
+    stamp = _user_stamp()
     with _lock:
-        if _f is None:
+        if _f is None or stamp != _f_stamp:
             _f = Faultiva(REPO)
+            _f_stamp = stamp
             # warm the verification model so the first analysis is not slow
             rng = np.random.default_rng(0)
             _f.verify("opentitan_hmac_sha256", [0], 1,
@@ -283,13 +312,30 @@ def _user_example_capture(f, family: str) -> dict | None:
     site = int(cat["sites"][start])
     stuck = int(cat["stuck"][start])
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "capture.csv"
+    # The simulator is whatever Verilator produced: on Windows that is a Linux
+    # ELF inside WSL, which cannot be executed directly.  Reuse the campaign's
+    # own bridge instead of inventing a second way to reach it.
+    from faultiva.characterize import wslbridge
+    from faultiva import toolchain as _tc
+    try:
+        _chain = _tc.detect()
+        bridge = wslbridge.detect(_chain.yosys.path, _chain.verilator.path)
+    except Exception:                                       # noqa: BLE001
+        bridge = wslbridge.DIRECT
+
+    # Scratch beside the circuit, not in %TEMP%: a Windows temp path is not
+    # visible to a simulator running inside the distribution.
+    scratch = root / "work" / "_example"
+    scratch.mkdir(parents=True, exist_ok=True)
+    try:
+        out = scratch / "capture.csv"
         try:
             proc = subprocess.run(
-                [str(binary), "+MODE=CAMPAIGN", f"+CSV={out}",
-                 "+BATCH_ID=0", f"+SITE_START={site}", "+SITE_COUNT=1"],
-                capture_output=True, text=True, timeout=600)
+                bridge.command(
+                    [str(binary), "+MODE=CAMPAIGN", f"+CSV={out}",
+                     "+BATCH_ID=0", f"+SITE_START={site}", "+SITE_COUNT=1"]),
+                capture_output=True, text=True, timeout=600,
+                creationflags=wslbridge._NO_WINDOW)
         except (OSError, subprocess.TimeoutExpired):
             return None
         if proc.returncode != 0 or not out.is_file():
@@ -303,6 +349,9 @@ def _user_example_capture(f, family: str) -> dict | None:
         # example captures use
         baseline = {int(r["vector"]): int(r["cycles"])
                     for r in all_rows if r["run_type"] == "BASELINE"}
+    finally:
+        import shutil as _shutil
+        _shutil.rmtree(scratch, ignore_errors=True)
 
     if not rows:
         return None
