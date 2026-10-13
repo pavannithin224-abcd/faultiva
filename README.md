@@ -4,20 +4,31 @@
 
 ### Find the broken gate in a chip from its output alone.
 
-Detection, localization, and structural verification in one 4.7 MB package. No GPU, no network, half a millisecond per query.
+Detection, localization, and structural verification, as a Windows app or a 4.7 MB Python package. No GPU, no network, half a millisecond per query.
 
 <p>
 <a href="https://github.com/pavannithin224-abcd/faultiva/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/pavannithin224-abcd/faultiva/actions/workflows/ci.yml/badge.svg"></a>
 <img alt="python" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-3776ab?style=flat-square&logo=python&logoColor=white">
 <a href="https://doi.org/10.5281/zenodo.22987539"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281%2Fzenodo.22987539.svg"></a>
 <img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square">
-<img alt="size" src="https://img.shields.io/badge/download-4.4%20MB-555?style=flat-square">
 <img alt="gpu" src="https://img.shields.io/badge/GPU-not%20required-0b6e4f?style=flat-square">
 </p>
 
 <img src="docs/demo.png" alt="Terminal session: Faultiva detects a fault, localizes it to a single candidate site out of 36,784, reports V1 verification as FLAGGED, clears a fault-free circuit, and returns OUT_OF_SCOPE on a non-HMAC circuit." width="88%">
 
 </div>
+
+---
+
+## Two ways in
+
+|  | |
+|---|---|
+| **[Download the app](../../releases/latest)** | Windows installer, 46 MB. Double-click, pick a circuit, upload a capture. No Python, no setup, no admin rights. |
+| **Use the library** | `git clone` and `pip install -r requirements.txt`. Same engine, scriptable, 5.7 MB. |
+
+The app and the library run identical code. The desktop build is a window around the same package, and both were
+checked to produce byte-identical results on all four shipped circuits.
 
 ---
 
@@ -51,6 +62,15 @@ Two independent paths to the same question, so when they agree it means somethin
 
 ## Install
 
+**The app.** Download `Faultiva-Setup-1.0.0.exe` from [Releases](../../releases/latest) and run it.
+It installs per-user, so Windows never asks for admin rights. Verify the download first if you like:
+
+```powershell
+Get-FileHash Faultiva-Setup-1.0.0.exe -Algorithm SHA256
+```
+
+**The library**
+
 ```bash
 git clone https://github.com/pavannithin224-abcd/faultiva.git
 cd faultiva
@@ -61,7 +81,7 @@ python examples/predict_one.py
 python examples/end_to_end.py
 ```
 
-Python 3.10+, numpy, scikit-learn, joblib. Everything needed is in the repository — there is no second download and no model to fetch.
+Python 3.10+, numpy, scikit-learn, joblib. Everything needed is in the repository. There is no second download and no model to fetch.
 
 ---
 
@@ -86,6 +106,61 @@ Python 3.10+, numpy, scikit-learn, joblib. Everything needed is in the repositor
 
 ---
 
+## Bring your own circuit
+
+The four circuits above ship ready. For anything else, Faultiva builds the signature
+dictionary itself. Point it at your Verilog and it synthesizes, injects every single
+stuck-at fault, simulates, and catalogues what each one did.
+
+In the app this is the **Add your circuit** page: choose your `.v` files and it reads the
+port names off the top module, so the clock, reset, data ports and their widths fill
+themselves in. You supply the start and done signals, since no naming rule can guess those
+reliably. Progress is reported per phase with a running clock, and the run can be cancelled
+and resumed, and completed batches are kept.
+
+From the command line:
+
+```bash
+python -m faultiva.characterize --config my_core.yaml --check    # validate, no simulation
+python -m faultiva.characterize --config my_core.yaml --workers 10
+```
+
+This needs **Yosys and Verilator**, which exist on Linux and on Windows inside WSL. The app
+detects them and tells you what is missing rather than failing midway; it prefers a pinned
+OSS CAD Suite over a distribution package, because a catalogue is only comparable to the
+shipped ones when it comes from the same toolchain.
+
+Characterization is a one-time offline step. Diagnosis afterwards is the same
+sub-millisecond lookup as for the bundled circuits.
+
+<details>
+<summary>A worked example, measured end to end</summary>
+
+<br>
+
+[`secworks/siphash`](https://github.com/secworks/siphash) — a core Faultiva had never seen,
+characterized through the app on an eight-core laptop:
+
+| | |
+|---|---|
+| fault sites | 3,997 |
+| single stuck-at faults | 7,994 |
+| test vectors | 64 |
+| wall-clock | ~3 minutes |
+| uniquely localizable | 65.7% |
+
+That 65.7% is the number to look at before trusting the result. It sits with the crypto
+cores rather than the CPU, which is what you would expect from a hash core, and it tells
+you directly how often a diagnosis will come back as one gate rather than a set.
+
+A circuit's config is a short YAML file naming its clock, reset, handshake signals, data
+ports, and any pins held at a fixed value. [`docs/CHARACTERIZATION.md`](docs/CHARACTERIZATION.md)
+has the full schema and a runnable example.
+
+</details>
+
+---
+
 ## Four things to know before you rely on it
 
 **1 · Localization returns a set, not always a single gate.**
@@ -99,7 +174,7 @@ the answer, not as a ranked guess.
 
 Stage 3's model was trained on `opentitan_hmac_sha256`. On anything else it returns
 `OUT_OF_SCOPE` rather than a number it cannot justify. Detection and localization work on all
-four shipped circuits.
+four shipped circuits and on any circuit you characterize yourself.
 
 **3 · Stage 3 disagrees with stage 2 about 29% of the time, by design.**
 
@@ -111,8 +186,9 @@ fault at a structurally hard-to-detect site *should* produce disagreement. Read 
 **4 · A new circuit needs characterizing before localization works.**
 
 Detection works anywhere you have a golden reference. Localization needs a signature
-dictionary, which means a full fault-injection campaign: offline, one time, hours per circuit. For scale: `secworks_chacha`, 10,111 sites and 20,222 faults, took 10.2 minutes on
-10 cores. Four circuits ship ready.
+dictionary, which means a full fault-injection campaign: offline, one time, minutes to hours
+depending on size. For scale: `secworks_chacha`, 10,111 sites and 20,222 faults, took 10.2
+minutes on 10 cores. Four circuits ship ready.
 
 <details>
 <summary>Scope boundaries and the full evidence trail</summary>
@@ -155,10 +231,13 @@ hash for every number.
 
 ## How it works
 
-Detection hashes the mismatch pattern between observed and golden responses into a
-**behaviour signature**. Localization looks that signature up in a dictionary built by
-injecting every possible stuck-at fault and recording what each one did — so a match returns exactly the gates capable of producing that behaviour. Verification then scores each
-candidate with a model that has never seen simulation output, only netlist structure.
+Detection compares the observed responses against the golden ones and reduces the difference
+to a **behaviour signature** — a digest over four channels: the response XOR, the cycle
+delta, and the timeout and protocol-error flags. Localization looks that signature up in a
+dictionary built by injecting every possible stuck-at fault and recording what each one did,
+so a match returns exactly the gates capable of producing that behaviour. Verification then
+scores each candidate with a model that has never seen simulation output, only netlist
+structure.
 
 The interesting property is what happens when localization is ambiguous: the candidate set
 *is* the fault equivalence class. There is no better answer available from output alone.
