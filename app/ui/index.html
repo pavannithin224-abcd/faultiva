@@ -350,6 +350,10 @@
   /* toolchain status rows.  NOT `.tool` - the analyser owns that name for
      its layout container, and a later `display:flex` here silently turned
      that container back into a row. */
+  .why{margin-top:9px;border-left:2px solid var(--line);padding:2px 0 2px 12px}
+  .why p{margin:0 0 6px;font-size:12.5px;line-height:1.6;color:var(--mut)}
+  .why p:last-child{margin-bottom:0}
+  .why b{color:var(--body);font-weight:600}
   .livebar{display:flex;align-items:center;gap:9px;margin:0 0 10px;
            padding:7px 11px;border:1px solid var(--line);border-radius:6px;
            background:var(--sunk)}
@@ -1057,11 +1061,49 @@ function render(d) {
   if (ver.verdict) {
     const kind = ver.verdict === "VERIFIED" ? "ok"
                : ver.verdict === "FLAGGED" ? "warn" : "info";
-    html += stage("03", "Verification", ver.verdict.replace(/_/g, " "), kind,
-      (ver.sites_scored ? `<dl>
-          <dt>sites scored</dt><dd>${ver.sites_scored}</dd>
-          <dt>above threshold</dt><dd>${ver.above_threshold} of ${ver.sites_scored} (thr ${ver.threshold})</dd>
-        </dl>` : "") + `<div class="note">${esc(ver.note || "")}</div>`);
+
+    /* The verdict alone misleads in two directions: OUT_OF_SCOPE reads as a
+       failed analysis, and FLAGGED reads as a failed localization when it is
+       the expected outcome on 29% of HMAC cases.  Both get one line of
+       context.  The 71% figure is the measured V1/V2 agreement already
+       published in README.md. */
+    let vbody = "";
+    if (ver.verdict === "OUT_OF_SCOPE") {
+      const n = loc && loc.fault_count;
+      const conf = n
+        ? `<b>${n} candidate${n === 1 ? "" : "s"}</b>`
+        : "the candidate count";
+      vbody =
+        `<div class="note">The structural verifier is a trained model, and it
+           was trained on <code>opentitan_hmac_sha256</code> only. On any
+           other circuit it declines rather than extrapolating.</div>
+         <div class="why">
+           <p><b>Detection and localization above are unaffected</b> &mdash;
+              neither uses this model.</p>
+           <p>Your confidence signal is ${conf}: a signature matching one site
+              identifies it outright. More test vectors give smaller sets.</p>
+         </div>`;
+    } else if (ver.verdict === "FLAGGED") {
+      vbody =
+        (ver.sites_scored ? `<dl>
+            <dt>sites scored</dt><dd>${ver.sites_scored}</dd>
+            <dt>above threshold</dt><dd>${ver.above_threshold} of ${ver.sites_scored} (thr ${ver.threshold})</dd>
+          </dl>` : "") +
+        `<div class="why"><p>Structural evidence does not corroborate the
+           localized site. The two stages read disjoint evidence and disagree
+           on <b>29%</b> of HMAC cases, more often as the candidate set grows.
+           A second opinion that differs, not a failed localization.</p></div>`;
+    } else {
+      vbody =
+        (ver.sites_scored ? `<dl>
+            <dt>sites scored</dt><dd>${ver.sites_scored}</dd>
+            <dt>above threshold</dt><dd>${ver.above_threshold} of ${ver.sites_scored} (thr ${ver.threshold})</dd>
+          </dl>` : "") + `<div class="note">${esc(ver.note || "")}</div>`;
+    }
+
+    const vlabel = ver.verdict === "OUT_OF_SCOPE"
+      ? "NOT APPLICABLE" : ver.verdict.replace(/_/g, " ");
+    html += stage("03", "Verification", vlabel, kind, vbody);
   }
 
   out.innerHTML = html;
