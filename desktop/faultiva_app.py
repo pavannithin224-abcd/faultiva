@@ -36,7 +36,7 @@ import urllib.request
 from pathlib import Path
 
 APP_NAME = "Faultiva"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 # frozen by PyInstaller -> resources sit in the unpack dir; otherwise the repo
 BUNDLE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))

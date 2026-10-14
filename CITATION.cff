@@ -22,8 +22,8 @@ type: software
 authors:
   - given-names: Pavan
     alias: pavannithin224-abcd
-version: 1.0.0
-date-released: '2026-09-27'
+version: 1.1.0
+date-released: '2026-10-14'
 license: Apache-2.0
 repository-code: 'https://github.com/pavannithin224-abcd/faultiva'
 doi: 10.5281/zenodo.22987539
