@@ -20,8 +20,7 @@ abstract: >-
   response-based method.
 type: software
 authors:
-  - family-names: Nithin
-    given-names: Pavan
+  - given-names: Pavan
     alias: pavannithin224-abcd
 version: 1.0.0
 date-released: '2026-09-27'
@@ -48,8 +47,7 @@ references:
       CircuitSage V2: Behaviour-Signature Fault Localization is Bounded by
       Structural Fault Equivalence
     authors:
-      - family-names: Nithin
-        given-names: Pavan
+      - given-names: Pavan
     doi: 10.5281/zenodo.22986950
     repository-code: >-
       https://github.com/pavannithin224-abcd/circuitsage-vlsi-fault-detection-v2
@@ -59,8 +57,7 @@ references:
   - type: software
     title: Graph-Aware Fault Detection for an OpenTitan HMAC Circuit
     authors:
-      - family-names: Nithin
-        given-names: Pavan
+      - given-names: Pavan
     doi: 10.5281/zenodo.22986785
     repository-code: >-
       https://github.com/pavannithin224-abcd/circuitsage-hmac-fault-detection

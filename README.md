@@ -14,7 +14,7 @@ Detection, localization, and structural verification, as a Windows app or a 4.7 
 <img alt="gpu" src="https://img.shields.io/badge/GPU-not%20required-0b6e4f?style=flat-square">
 </p>
 
-<img src="docs/demo.png" alt="Terminal session: Faultiva detects a fault, localizes it to a single candidate site out of 36,784, reports V1 verification as FLAGGED, clears a fault-free circuit, and returns OUT_OF_SCOPE on a non-HMAC circuit." width="88%">
+<img src="docs/app-overview.png" alt="The Faultiva desktop app: a fault catalogue of 42,819 signatures over 127,484 site entries, 93,185 learned parameters, four characterized circuits, typical diagnosis around 10 ms, and a detected toolchain of yosys 0.68+106 and verilator 5.051." width="92%">
 
 </div>
 
@@ -51,6 +51,12 @@ print(result.candidate_sites)     # the gates that could produce this behaviour
 On the HMAC circuit that narrows **36,784 possible fault sites to a handful** — often to one.
 
 <div align="center">
+<img src="docs/app-analyse.png" alt="Analysing a capture: 38 of 64 test vectors differ from the fault-free reference, and the signature resolves to one candidate, an SA0 fault on gate 9935." width="92%">
+<br>
+<sub>A capture from the OpenTitan HMAC core: 38 of 64 vectors differ, and the signature resolves to a single gate.</sub>
+</div>
+
+<div align="center">
 <img src="docs/pipeline.png" alt="Three-stage pipeline: detection and localization reason from behaviour with zero learned parameters; verification reasons from structure using a 93,185-parameter MLP." width="100%">
 </div>
 
@@ -70,6 +76,10 @@ Get-FileHash Faultiva-Setup-1.0.0.exe -Algorithm SHA256
 ```
 
 **The library**
+
+<div align="center">
+<img src="docs/demo.png" alt="The same engine from a terminal: a fault detected and localized, a fault-free circuit cleared, and OUT_OF_SCOPE returned on a circuit the verifier was not trained on." width="88%">
+</div>
 
 ```bash
 git clone https://github.com/pavannithin224-abcd/faultiva.git
@@ -117,6 +127,16 @@ port names off the top module, so the clock, reset, data ports and their widths 
 themselves in. You supply the start and done signals, since no naming rule can guess those
 reliably. Progress is reported per phase with a running clock, and the run can be cancelled
 and resumed, and completed batches are kept.
+
+<div align="center">
+<img src="docs/app-addcircuit.png" alt="Adding a circuit: siphash_core.v is read and every port listed, with clock, reset, data ports and widths filled in from the design." width="92%">
+<br>
+<sub>Every port is read off the design. Held constants are prefilled at zero and flagged, because a round count left at zero stops the circuit ever finishing.</sub>
+<br><br>
+<img src="docs/app-preflight.png" alt="Preflight on siphash_core: 3,997 fault sites, 7,994 single stuck-at faults, 63 simulation batches, estimated 32 minutes on 10 workers." width="92%">
+<br>
+<sub>What the run will cost, before you start it. Checked in 1.4 seconds.</sub>
+</div>
 
 From the command line:
 
@@ -258,7 +278,7 @@ The interesting property is what happens when localization is ambiguous: the can
 ```bibtex
 @software{faultiva2026,
   title   = {Faultiva: Hybrid Fault Detection and Localization for VLSI Circuits},
-  author  = {Nithin, Pavan},
+  author  = {Pavan},
   year    = {2026},
   version = {1.0.0},
   url     = {https://github.com/pavannithin224-abcd/faultiva}
